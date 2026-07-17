@@ -1,0 +1,14 @@
+# ── Large data files ──────────────────────────────────────────────────
+*.bin
+
+# ── Compiled binaries ─────────────────────────────────────────────────
+cpu/sha256_sw
+cpu/sha256_hw
+cpu/sha256_mt_sw
+cpu/sha256_mt_hw
+
+# ── OS / editor artifacts ─────────────────────────────────────────────
+.DS_Store
+*~
+*.swp
+__pycache__/

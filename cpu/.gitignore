@@ -1,0 +1,13 @@
+# ── Compiled binaries (rebuilt with 'make all') ──────────────────────
+sha256_sw
+sha256_hw
+sha256_mt_sw
+sha256_mt_hw
+
+# ── Input data file (too large for git) ──────────────────────────────
+*.bin
+
+# ── OS / editor artifacts ─────────────────────────────────────────────
+.DS_Store
+*~
+*.swp

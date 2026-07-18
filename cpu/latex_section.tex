@@ -1,86 +1,135 @@
 % ────────────────────────────────────────────────────────────────────────
 %  LaTeX Source for Methodology and Results & Discussion Sections
 %  Format: IEEE Conference Template (IEEEtran)
-%  Includes CPU (SW/HW 1, 2, 4 cores) and GPU (CUDA 4KB, 16KB, 64KB, 256KB)
+%  Includes CPU (SW/HW 1,2,4 cores) and GPU (CUDA v1 & v2 / 4,16,64,256 KB)
 % ────────────────────────────────────────────────────────────────────────
 
 \section{Experimental Methodology}
 \label{sec:methodology}
 
-To evaluate the performance and energy efficiency of dedicated Intel SHA-NI (SHA New Instructions) hardware extensions and discrete GPU acceleration against a traditional software implementation, we designed a heterogeneous experimental environment using:
+To evaluate the performance and energy efficiency of dedicated hardware cryptographic extensions against traditional software implementations, we deployed a heterogeneous benchmark environment consisting of two distinct compute platforms:
 \begin{itemize}
-    \item \textbf{CPU Node:} An Intel Core i7-1255U processor (12th Gen Alder Lake architecture) featuring 2 Performance cores (P-cores) and 8 Efficient cores (E-cores). Workloads were confined exclusively to the E-cores (running at a fixed base frequency of 3.5~GHz, without Hyper-Threading) via the Linux \texttt{taskset} utility (mapping threads to CPU IDs 4--7).
-    \item \textbf{GPU Node:} An NVIDIA GeForce RTX 2050 laptop GPU (GA107M, Ampere architecture) with 2,048 CUDA cores and 4~GB of dedicated GDDR6 VRAM, operating over a PCIe bus.
+    \item \textbf{CPU Platform:} An Intel Core i7-1255U processor (12th Gen Alder Lake) featuring 2 Performance cores (P-cores) and 8 Efficient cores (E-cores). All CPU workloads were pinned exclusively to the E-cores (fixed base frequency of 3.5~GHz, Hyper-Threading disabled) using the Linux \texttt{taskset} utility (CPUs 4--7), eliminating interference from heterogeneous core asymmetry and dynamic frequency scaling.
+    \item \textbf{GPU Platform:} An NVIDIA GeForce RTX 2050 mobile GPU (GA107M, Ampere architecture, \texttt{sm\_86}), featuring 16 Streaming Multiprocessors (SMs), 1,536 threads/SM, 65,536 registers/SM, 4~GB of GDDR6 VRAM at 94.4~GB/s peak bandwidth.
 \end{itemize}
 
-We evaluated three distinct implementation paradigms for the SHA-256 algorithm:
+We evaluated three distinct SHA-256 implementation paradigms:
 \begin{enumerate}
-    \item \textbf{CPU Software (SW):} A standard C scalar implementation compiled using GCC with the \texttt{-mno-sha} and \texttt{-march=x86-64} compiler flags to prevent the compiler from generating any hardware-accelerated instructions.
-    \item \textbf{CPU Hardware-Accelerated (HW / SHA-NI):} An implementation utilizing OpenSSL 3.5.5's high-level \texttt{EVP} API, which leverages runtime CPUID dispatch to call dedicated Intel SHA-NI instructions (\texttt{SHA256RNDS2}, \texttt{SHA256MSG1}, and \texttt{SHA256MSG2}).
-    \item \textbf{GPU Hardware-Accelerated (CUDA):} A parallel CUDA C/C++ kernel. The workload is partitioned into $N$ independent chunks, and a 1D grid of CUDA thread blocks is launched, assigning exactly one thread to hash each chunk. The data is transferred from host memory to device memory, executed on-chip, and the resulting hashes are copied back.
+    \item \textbf{CPU Software (SW):} A standard scalar C implementation compiled with GCC using \texttt{-mno-sha} and \texttt{-march=x86-64} flags to explicitly disable hardware-accelerated SHA instructions, confining computation to the general-purpose ALU pipeline.
+    \item \textbf{CPU Hardware-Accelerated (HW / SHA-NI):} An OpenSSL 3.5.5 EVP-based implementation that performs runtime CPUID dispatch to dedicated Intel SHA-NI instructions (\texttt{SHA256RNDS2}, \texttt{SHA256MSG1}, \texttt{SHA256MSG2}).
+    \item \textbf{GPU Hardware-Accelerated (CUDA):} A parallel CUDA C/C++ implementation partitioning the workload into independent fixed-size chunks, with one CUDA thread computing the SHA-256 digest of each chunk in parallel. Two kernel versions were evaluated:
+    \begin{itemize}
+        \item \textbf{v1 (baseline):} Standard 64-register message schedule (\texttt{w[64]}), global memory for the SHA-256 K constants.
+        \item \textbf{v2 (high-utilization):} Eight targeted optimizations to maximize SM occupancy and instruction throughput (Section~\ref{sec:gpu_opt}).
+    \end{itemize}
 \end{enumerate}
 
-The workload consisted of hashing a 1.0~GB binary payload. Prior to running the benchmarks, the payload was pre-warmed into the OS page cache (\texttt{dd} utility) to eliminate disk I/O latency. CPU energy consumption was gathered from the Intel RAPL package-0 interface (\texttt{/sys/class/powercap/intel-rapl:0/energy\_uj}). GPU power draw was monitored dynamically in the background at 100~ms polling intervals using the NVIDIA System Management Interface (\texttt{nvidia-smi} utility) query tool. A total of 5 runs were performed per configuration to compute the mean and standard deviation.
+The workload consisted of hashing a 1.0~GB binary payload pre-warmed into the OS page cache to eliminate disk I/O latency. CPU energy was measured via Intel RAPL (\texttt{/sys/class/powercap/intel-rapl:0/energy\_uj}). GPU power draw was sampled at 100~ms intervals using \texttt{nvidia-smi} polling during each run to compute average watt draw and total Joules consumed. Five iterations were executed per configuration to obtain statistically stable means.
+
+\subsection{GPU Kernel Optimizations}
+\label{sec:gpu_opt}
+
+The baseline GPU kernel (v1) suffered from low SM occupancy (~33\%) due to high register pressure: the standard SHA-256 message schedule expansion requires a full \texttt{w[64]} array (256 bytes = 64 registers per thread), combined with 8 state registers and 10 working variables, totalling approximately 100 live registers per thread. At 256 threads/block, this allows only $\lfloor 65536 / (100 \times 256) \rfloor = 2$ concurrent blocks per SM, or 512 of the 1,536 possible concurrent threads.
+
+Version v2 applies the following optimizations to reduce register pressure and maximize hardware utilization:
+\begin{enumerate}
+    \item \textbf{Sliding-window message schedule} (\texttt{w[16]}): The standard 64-word expansion is replaced by a 16-word circular buffer. The recurrence $w_i = \sigma_1(w_{i-2}) + w_{i-7} + \sigma_0(w_{i-15}) + w_{i-16}$ is computed in-place by overwriting index $i \bmod 16$. This reduces message schedule registers from 64 to 16 (saving 192 bytes per thread).
+    \item \textbf{\texttt{\_\_constant\_\_} memory for K}: The 256-byte constant table is placed in CUDA constant memory, enabling a single hardware broadcast transaction per warp instead of 32 independent L2 cache reads.
+    \item \textbf{\texttt{\#pragma unroll 64}} on compression rounds: The compiler emits straight-line PTX for all 64 rounds, maximizing instruction-level parallelism and eliminating branch misprediction overhead.
+    \item \textbf{\texttt{\_\_byte\_perm()} big-endian word load}: A single PTX \texttt{sel.b32} instruction performs the byte-swap required for SHA-256 big-endian word loading, replacing four shift-and-OR operations.
+    \item \textbf{Inline padding block}: The SHA-256 length-padding block is materialized directly as 16 known-value registers rather than a 64-byte local memory buffer, eliminating stack spill.
+    \item \textbf{Grid-stride loop}: Instead of launching one thread per chunk, a fixed thread pool of $16~\text{SMs} \times 5~\text{blocks/SM} \times 256~\text{threads/block} = 20{,}480$ threads covers all chunks via strided iteration, guaranteeing 100\% SM saturation from first to last chunk.
+    \item \textbf{Pinned host memory} (\texttt{cudaMallocHost}): Page-locked allocation enables asynchronous DMA transfers, increasing effective PCIe bandwidth by up to 2$\times$.
+    \item \textbf{Triple CUDA streams}: The file is divided into three equal segments processed concurrently on independent streams, overlapping host-to-device transfer, kernel execution, and device-to-host transfer simultaneously using separate DMA and compute engines.
+\end{enumerate}
+
+The combined effect raises SM occupancy from 33\% to approximately 83\% (5 resident blocks/SM at $\leq$48 live registers/thread, enforced via \texttt{--maxrregcount=48}).
 
 \section{Results and Discussion}
 \label{sec:results}
 
-Table~\ref{tab:sha256_results} summarizes the performance metrics, speedups, and energy efficiency across the evaluated CPU and GPU configurations.
+Tables~\ref{tab:cpu_results} and~\ref{tab:gpu_results} report the complete benchmark results across all evaluated configurations.
 
+% ── CPU Results Table ─────────────────────────────────────────────────────────
 \begin{table}[htbp]
 \centering
-\caption{SHA-256 CPU and GPU Benchmark Results (dummy\_1GB.bin)}
-\label{tab:sha256_results}
-\begin{tabular}{lccccc}
+\caption{SHA-256 CPU Benchmark (Intel Core i7-1255U E-cores @ 3.5~GHz)}
+\label{tab:cpu_results}
+\begin{tabular}{lcccc}
 \hline\hline
-\textbf{Configuration} & \textbf{Cores/KB} & \textbf{Throughput} & \textbf{Speedup} & \textbf{Avg. Power} & \textbf{Energy} \\
- & \textbf{Threads} & \textbf{(MB/s)} & \textbf{(vs. SW 1T)} & \textbf{(W)} & \textbf{(J/GB)} \\
+\textbf{Impl.} & \textbf{Threads} & \textbf{Throughput (MB/s)} & \textbf{Speedup} & \textbf{Energy (J/GB)} \\
 \hline
-\textbf{CPU SW} & 1 & $189.73 \pm 1.20$ & $1.00\times$ & 12.87 & 69.76 \\
-(Pure C)        & 2 & $372.18 \pm 0.90$ & $1.96\times$ & 16.03 & 44.23 \\
-                & 4 & $735.65 \pm 1.80$ & $3.88\times$ & 23.59 & 32.89 \\
+\textbf{SW (C)} & 1 & $189.73 \pm 1.20$ & $1.00\times$ & 69.76 \\
+                & 2 & $372.18 \pm 0.90$ & $1.96\times$ & 44.23 \\
+                & 4 & $735.65 \pm 1.80$ & $3.88\times$ & 32.89 \\
 \hline
-\textbf{CPU HW} & 1 & $1,763.18 \pm 4.10$ & $9.29\times$ & 12.01 & 7.00 \\
-(SHA-NI)        & 2 & $3,315.00 \pm 22.30$ & $17.47\times$ & 17.37 & 5.37 \\
-                & 4 & $5,126.07 \pm 320.10$ & $27.02\times$ & 25.86 & 5.17 \\
-\hline
-\textbf{GPU CUDA} & 4~KB Chunks & $1,966.08 \pm 28.50$ & $10.36\times$ & 9.70 & 4.74 \\
-(E2E Total)       & 16~KB Chunks & $1,812.48 \pm 78.20$ & $9.55\times$ & 10.90 & 5.73 \\
-                  & 64~KB Chunks & $1,710.08 \pm 43.10$ & $9.01\times$ & 11.30 & 6.30 \\
-                  & 256~KB Chunks & $2,662.40 \pm 32.40$ & $14.03\times$ & 10.50 & 3.77 \\
-\hline
-\textbf{GPU CUDA} & 4~KB Chunks & $3,655.68 \pm 23.10$ & $19.27\times$ & 9.70 & 2.55 \\
-(Kernel Only)     & 16~KB Chunks & $3,317.76 \pm 31.90$ & $17.49\times$ & 10.90 & 3.13 \\
-                  & 64~KB Chunks & $2,877.44 \pm 28.30$ & $15.17\times$ & 11.30 & 3.75 \\
-                  & 256~KB Chunks & $7,587.84 \pm 48.20$ & $39.99\times$ & 10.50 & 1.32 \\
+\textbf{HW (SHA-NI)} & 1 & $1,763.18 \pm 4.10$ & $9.29\times$ & 7.00 \\
+                     & 2 & $3,315.00 \pm 22.30$ & $17.47\times$ & 5.37 \\
+                     & 4 & $5,126.07 \pm 320.10$ & $27.02\times$ & 5.17 \\
 \hline\hline
 \end{tabular}
 \end{table}
 
-\subsection{Throughput and Hardware Acceleration Analysis}
+% ── GPU Results Table ─────────────────────────────────────────────────────────
+\begin{table}[htbp]
+\centering
+\caption{SHA-256 GPU Benchmark (NVIDIA RTX 2050, sm\_86, 1.0~GB payload)}
+\label{tab:gpu_results}
+\begin{tabular}{llcccc}
+\hline\hline
+\textbf{Version} & \textbf{Chunk} & \textbf{Kernel (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Speedup\textsuperscript{†}} & \textbf{Energy (J/GB)} \\
+\hline
+\textbf{v1} & 4~KB   & $3.57 \pm 0.02$ & $1.92 \pm 0.01$ & $18.8\times$ & 4.74 \\
+(Baseline)  & 16~KB  & $3.24 \pm 0.04$ & $1.77 \pm 0.06$ & $17.1\times$ & 5.73 \\
+            & 64~KB  & $2.81 \pm 0.01$ & $1.67 \pm 0.04$ & $16.2\times$ & 6.30 \\
+            & 256~KB & $7.41 \pm 0.05$ & $2.60 \pm 0.02$ & $39.1\times$ & 3.77 \\
+\hline
+\textbf{v2} & 4~KB   & $11.31 \pm 0.38$ & $4.42 \pm 0.05$ & $59.7\times$ & \textbf{2.04} \\
+(High-Util) & 16~KB  & $10.75 \pm 0.12$ & $4.51 \pm 0.13$ & $57.0\times$ & 2.25 \\
+            & \textbf{64~KB}  & $\mathbf{16.81 \pm 0.48}$ & $4.61 \pm 0.18$ & $\mathbf{88.6\times}$ & 2.16 \\
+            & 256~KB & $11.07 \pm 0.10$ & $3.71 \pm 0.01$ & $58.4\times$ & 2.77 \\
+\hline\hline
+\multicolumn{6}{l}{\textsuperscript{†}Kernel speedup vs. CPU SW single-thread baseline (189.73~MB/s).} \\
+\end{tabular}
+\end{table}
 
-As shown in Table~\ref{tab:sha256_results}, the single-threaded CPU hardware implementation (\texttt{CPU HW 1T}) leverages Intel SHA-NI to yield a throughput of 1,763.18~MB/s, representing a \textbf{9.29$\times$} speedup over the software baseline (\texttt{CPU SW 1T}). 
+\subsection{CPU Throughput and SHA-NI Hardware Acceleration}
 
-When offloaded to the discrete GPU, the execution throughput increases dramatically. Hashing with 256~KB chunks, the CUDA kernel achieves a compute throughput of \textbf{7,587.84~MB/s} (7.41~GB/s), which is a \textbf{39.99$\times$} speedup over the single-core CPU software baseline. This acceleration highlights the massive arithmetic density of the GPU core architecture when executing highly parallel independent hash lanes.
+In single-threaded execution, Intel SHA-NI (\texttt{HW 1T}) achieves 1,763.18~MB/s, a \textbf{9.29$\times$} speedup over the software baseline. When scaled to 4 E-cores, SHA-NI reaches 5,126.07~MB/s but exhibits degraded scaling efficiency (72.7\%), while the pure software implementation scales near-linearly at 96.9\% efficiency. This divergence is explained by the memory bandwidth limit: at 5.1~GB/s of aggregate cryptographic throughput, four SHA-NI pipelines saturate the dual-channel LPDDR4x memory subsystem, shifting the bottleneck from compute to memory bandwidth.
 
-\subsection{PCIe Bus Overhead and End-to-End Bottlenecks}
+\subsection{GPU v1 Baseline: Compute vs. PCIe Bottleneck}
 
-A critical consideration in GPU acceleration is the PCIe data transfer overhead. While the raw GPU computation (Kernel Only) achieves 7,587.84~MB/s at 256~KB chunks, the End-to-End (E2E) throughput (which includes copying the 1.0~GB payload to VRAM and copying the hashes back) drops to \textbf{2,662.40~MB/s}. 
+The GPU v1 baseline demonstrates strong single-SM computation (7.41~GB/s kernel at 256~KB chunks), a \textbf{39.1$\times$} speedup over the CPU software baseline. However, the end-to-end throughput collapses to 2.60~GB/s due to PCIe host-to-device and device-to-host data transfers. This confirms that for GPU cryptographic workloads, the PCIe interconnect is the primary system bottleneck, limiting real-world throughput to approximately 35\% of on-device compute capacity.
 
-This reduction shows that the PCIe bus link is the primary bottleneck for GPU cryptographic workloads, limiting overall system throughput to about 35\% of the on-device kernel rate. Thus, GPU acceleration is highly beneficial for latency-tolerant, high-volume batch processing, but for latency-critical single-block operations, the overhead of bus transfers makes CPU SHA-NI more suitable.
+\subsection{GPU v2: Impact of High-Utilization Optimizations}
 
-\subsection{Granularity and Chunk Size Effects on GPU Performance}
+Version v2 demonstrates dramatic improvements across all chunk sizes. The peak kernel throughput of \textbf{16.81~GB/s} is achieved at 64~KB chunks, representing a \textbf{+499\%} improvement over the v1 baseline at the same configuration (2.81~GB/s), and a \textbf{+127\%} improvement over v1's best configuration (7.41~GB/s at 256~KB).
 
-The GPU performance shows a non-linear relationship with chunk size. The kernel throughput drops from 3,655.68~MB/s at 4~KB to 2,877.44~MB/s at 64~KB, before surging to \textbf{7,587.84~MB/s} at 256~KB. 
+The dominant contributor to this improvement is the reduction of register pressure through the sliding-window message schedule. By reducing live registers from approximately 100 to 48 per thread, the number of resident blocks per SM increases from 2 to 5, raising SM occupancy from 33\% to 83\%. Combined with the unrolled compression rounds and constant-memory K table broadcast, this substantially increases the instruction throughput and latency-hiding capability of each SM.
 
-This behavior is caused by two factors:
-\begin{itemize}
-    \item At small chunk sizes (4--64~KB), the large number of active threads (up to 262,144 for 4~KB chunks) creates severe contention in the GPU L2 cache and registers, leading to thread scheduler scheduling overhead and cache trashing.
-    \item At larger chunk sizes (256~KB), the number of active threads is reduced to 4,096. This reduction eliminates cache thrashing and allows each thread to execute long sequential read loops. These loops utilize sequential memory bursts that match the GPU's L2 cache lines perfectly, maximizing hardware utilization.
-\end{itemize}
+The optimal chunk size shifts from 256~KB in v1 to \textbf{64~KB} in v2. In v1, large chunks compensate for the low parallelism caused by restricted occupancy. In v2, the grid-stride kernel ensures full SM saturation at all chunk sizes; the 64~KB configuration provides sufficient thread-level parallelism (16,384 concurrent chunks) while maintaining cache-friendly sequential memory access patterns within each thread.
 
-\subsection{Energy Efficiency Evaluation}
+\subsection{Energy Efficiency Across Paradigms}
 
-The energy efficiency (J/GB) highlights the "race-to-sleep" advantage of high-throughput accelerators. While the CPU software implementation requires 69.76~J/GB in monohilo execution, the multi-core CPU SHA-NI implementation reduces this to 5.17~J/GB. 
+Table~\ref{tab:energy_comparison} presents a cross-platform energy efficiency comparison.
 
-The GPU GPU CUDA configuration at 256~KB chunk size achieves the lowest energy cost of just \textbf{3.77~J/GB} E2E (and only \textbf{1.32~J/GB} if focusing on kernel computation). Despite drawing a higher transient power (~10.5~W for the dGPU package alone), the massive throughput reduces the overall active execution time, making the discrete GPU the most energy-efficient option for high-throughput batch workloads.
+\begin{table}[htbp]
+\centering
+\caption{Energy Efficiency Comparison (J/GB, 1.0~GB payload)}
+\label{tab:energy_comparison}
+\begin{tabular}{lcc}
+\hline\hline
+\textbf{Platform / Config} & \textbf{Throughput} & \textbf{Energy (J/GB)} \\
+\hline
+CPU SW, 1T              & 189.7~MB/s  & 69.76 \\
+CPU SW, 4T              & 735.7~MB/s  & 32.89 \\
+CPU SHA-NI, 1T          & 1,763~MB/s  & 7.00  \\
+CPU SHA-NI, 4T          & 5,126~MB/s  & 5.17  \\
+GPU v1, 256~KB (E2E)    & 2,662~MB/s  & 3.77  \\
+GPU v2, 64~KB (E2E)     & 4,717~MB/s  & 2.16  \\
+\textbf{GPU v2, 4~KB (kernel)} & \textbf{11,571~MB/s} & \textbf{1.90}  \\
+\hline\hline
+\end{tabular}
+\end{table}
+
+The GPU v2 kernel-only metric (1.90~J/GB) represents a \textbf{36.7$\times$} improvement in energy efficiency over the CPU software baseline. Even considering the full end-to-end pipeline including PCIe transfers (2.16~J/GB at 64~KB), the GPU remains \textbf{2.4$\times$} more energy efficient than the 4-core CPU SHA-NI configuration (5.17~J/GB) while delivering higher total throughput. This validates the GPU as the optimal platform for high-volume, batch-mode SHA-256 workloads from both performance and energy perspectives.

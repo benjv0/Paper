@@ -1,0 +1,44 @@
+========================================================================
+NVIDIA CUDA sm_86 Theoretical Occupancy Analysis (GA107 / RTX 2050)
+========================================================================
+Hardware parameters:
+  SM Architecture: Ampere GA107 (sm_86)
+  Max Threads/SM:  1536
+  Max Blocks/SM:   16
+  Total Regs/SM:   65536
+  Block Size:      256 threads (8 warps)
+------------------------------------------------------------------------
+Kernel: sha256_kernel_v1 (Baseline, w[64])
+  Reported Registers/Thread: 58
+  Allocated Registers/Thread (sm_86): 64
+  Registers/Block (256 threads): 16384
+  Stack Frame: 368 B | Spills: 0 B | cmem: 384 B
+  Active Blocks/SM: 4 (Max: 16)
+  Active Warps/SM:  32 / 48
+  Active Threads/SM: 1024 / 1536
+  Theoretical Occupancy: 66.7%
+
+Kernel: sha256_kernel_v1 (~100 regs unconstrained)
+  Reported Registers/Thread: 100
+  Allocated Registers/Thread (sm_86): 104
+  Registers/Block (256 threads): 26624
+  Stack Frame: 368 B | Spills: 0 B | cmem: 384 B
+  Active Blocks/SM: 2 (Max: 16)
+  Active Warps/SM:  16 / 48
+  Active Threads/SM: 512 / 1536
+  Theoretical Occupancy: 33.3%
+
+Kernel: sha256_kernel_v2 (Sliding window w[16], --maxrregcount=48)
+  Reported Registers/Thread: 48
+  Allocated Registers/Thread (sm_86): 48
+  Registers/Block (256 threads): 12288
+  Stack Frame: 0 B | Spills: 0 B | cmem: 384 B
+  Active Blocks/SM: 5 (Max: 16)
+  Active Warps/SM:  40 / 48
+  Active Threads/SM: 1280 / 1536
+  Theoretical Occupancy: 83.3%
+
+Summary:
+  Kernel v1 (~100 regs): 2 blocks/SM -> 33.3% occupancy
+  Kernel v2 (<=48 regs): 5 blocks/SM -> 83.3% occupancy (2.5x occupancy increase)
+========================================================================

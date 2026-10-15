@@ -1,8 +1,22 @@
+/*
+ * sha256_gpu.cu — Baseline CUDA SHA-256 Benchmark (Kernel v1)
+ * ============================================================
+ * Baseline implementation:
+ *  - Standard w[64] message schedule expansion in local memory
+ *  - Constant/device table K[64]
+ *  - One thread per message chunk
+ *  - Supports --output-mode {full, reduce}
+ *  - Supports --staging {pinned, pageable}
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <cuda_runtime.h>
+
+#include "../common/workload.h"
+#include "../common/nist_vectors.h"
 
 #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
 #define CH(x,y,z)     (((x) & (y)) ^ (~(x) & (z)))
@@ -88,6 +102,7 @@ __device__ static void sha256_update_gpu(SHA256_CTX_GPU *ctx, const uint8_t *dat
 __device__ static void sha256_final_gpu(SHA256_CTX_GPU *ctx, uint8_t *hash)
 {
     uint32_t i = ctx->datalen;
+    ctx->bitlen += (uint64_t)ctx->datalen * 8;
     if (ctx->datalen < 56) {
         ctx->data[i++] = 0x80;
         while (i < 56) ctx->data[i++] = 0x00;
@@ -97,7 +112,6 @@ __device__ static void sha256_final_gpu(SHA256_CTX_GPU *ctx, uint8_t *hash)
         sha256_transform_gpu(ctx, ctx->data);
         memset(ctx->data, 0, 56);
     }
-    ctx->bitlen += (uint64_t)ctx->datalen * 8;
     ctx->data[63]=  ctx->bitlen        & 0xff;
     ctx->data[62]= (ctx->bitlen >>  8) & 0xff;
     ctx->data[61]= (ctx->bitlen >> 16) & 0xff;
@@ -119,11 +133,7 @@ __device__ static void sha256_final_gpu(SHA256_CTX_GPU *ctx, uint8_t *hash)
     }
 }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/*  CUDA Kernel                                                        */
-/* ─────────────────────────────────────────────────────────────────── */
-
-__global__ void sha256_kernel(const uint8_t *d_in, uint8_t *d_out, long chunk_size, long num_chunks)
+__global__ void sha256_kernel_v1(const uint8_t * __restrict__ d_in, uint8_t * __restrict__ d_out, long chunk_size, long num_chunks)
 {
     long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_chunks) return;
@@ -134,130 +144,206 @@ __global__ void sha256_kernel(const uint8_t *d_in, uint8_t *d_out, long chunk_si
     sha256_final_gpu(&ctx, d_out + (i * 32));
 }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/*  Main entrypoint                                                    */
-/* ─────────────────────────────────────────────────────────────────── */
+__global__ void xor_reduce_kernel(const uint8_t * __restrict__ d_in, uint8_t * __restrict__ d_out, long num_chunks) {
+    uint32_t local[8] = {0};
+    for (long idx = (long)blockIdx.x * blockDim.x + threadIdx.x;
+         idx < num_chunks;
+         idx += (long)gridDim.x * blockDim.x)
+    {
+        const uint32_t *src = (const uint32_t *)(d_in + idx * 32);
+        #pragma unroll 8
+        for (int i = 0; i < 8; i++) local[i] ^= src[i];
+    }
 
-#define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
-void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        #pragma unroll 8
+        for (int i = 0; i < 8; i++) local[i] ^= __shfl_down_sync(0xffffffff, local[i], offset);
+    }
+
+    if ((threadIdx.x & 31) == 0) {
+        uint32_t *d32 = (uint32_t *)d_out;
+        #pragma unroll 8
+        for (int i = 0; i < 8; i++) atomicXor(&d32[i], local[i]);
+    }
+}
+
+#define checkCudaErrors(val) check_cuda((val), #val, __FILE__, __LINE__)
+static inline void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line) {
     if (result != cudaSuccess) {
         fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n",
-                file, line, static_cast<unsigned int>(result), cudaGetErrorName(result), func);
+                file, line, (unsigned int)result, cudaGetErrorName(result), func);
         exit(EXIT_FAILURE);
     }
 }
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <file> <chunk_size> [runs]\n", argv[0]);
-        return 1;
+    const char *filepath = "dummy_1GB.bin";
+    size_t chunk_size = 64;
+    int runs = 5;
+    OutputMode out_mode = OUTPUT_MODE_FULL;
+    StagingMode stg_mode = STAGING_PINNED;
+    const char *save_digests_path = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--file") == 0 && i + 1 < argc) {
+            filepath = argv[++i];
+        } else if (strcmp(argv[i], "--chunk-size") == 0 && i + 1 < argc) {
+            chunk_size = (size_t)atol(argv[++i]);
+        } else if (strcmp(argv[i], "--output-mode") == 0 && i + 1 < argc) {
+            if (strcmp(argv[i+1], "reduce") == 0) out_mode = OUTPUT_MODE_REDUCE;
+            else out_mode = OUTPUT_MODE_FULL;
+            i++;
+        } else if (strcmp(argv[i], "--staging") == 0 && i + 1 < argc) {
+            if (strcmp(argv[i+1], "pageable") == 0) stg_mode = STAGING_PAGEABLE;
+            else stg_mode = STAGING_PINNED;
+            i++;
+        } else if (strcmp(argv[i], "--runs") == 0 && i + 1 < argc) {
+            runs = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--save-digests") == 0 && i + 1 < argc) {
+            save_digests_path = argv[++i];
+        } else if (argv[i][0] != '-' && i == 1) {
+            /* Support legacy positional argument: <file> <chunk_size> [runs] */
+            filepath = argv[1];
+            if (i + 1 < argc && argv[i+1][0] != '-') chunk_size = (size_t)atol(argv[++i]);
+            if (i + 1 < argc && argv[i+1][0] != '-') runs = atoi(argv[++i]);
+        }
     }
 
-    const char *filepath = argv[1];
-    long chunk_size = atol(argv[2]);
-    int runs = (argc >= 4) ? atoi(argv[3]) : 5;
-    if (runs < 1) runs = 1;
+    uint8_t *h_in = NULL;
+    uint8_t *h_pinned_stage = NULL;
 
-    /* Read the input file to Host memory */
+    /* Query file size */
     FILE *fp = fopen(filepath, "rb");
     if (!fp) { perror("fopen"); return 1; }
     fseek(fp, 0, SEEK_END);
-    long file_bytes = ftell(fp);
+    size_t file_bytes = (size_t)ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    uint8_t *h_in = (uint8_t *)malloc(file_bytes);
-    if (!h_in) { perror("malloc host input"); fclose(fp); return 1; }
+    size_t num_chunks = file_bytes / chunk_size;
+    size_t blocks_per_chunk = compute_blocks_per_chunk(chunk_size);
+    size_t payload_bytes = num_chunks * chunk_size;
+
+    if (stg_mode == STAGING_PINNED) {
+        checkCudaErrors(cudaMallocHost(&h_in, file_bytes));
+    } else {
+        h_in = (uint8_t *)malloc(file_bytes);
+        checkCudaErrors(cudaMallocHost(&h_pinned_stage, file_bytes));
+    }
+
     size_t read_bytes = fread(h_in, 1, file_bytes, fp);
     fclose(fp);
-    if (read_bytes != (size_t)file_bytes) {
+    if (read_bytes != file_bytes) {
         fprintf(stderr, "Error reading full file\n");
-        free(h_in);
         return 1;
     }
 
-    long num_chunks = file_bytes / chunk_size;
-    if (num_chunks < 1) {
-        fprintf(stderr, "Chunk size is larger than the file\n");
-        free(h_in);
-        return 1;
-    }
+    uint8_t *h_out = NULL;
+    checkCudaErrors(cudaMallocHost(&h_out, num_chunks * 32));
 
-    uint8_t *h_out = (uint8_t *)malloc(num_chunks * 32);
-    if (!h_out) { perror("malloc host output"); free(h_in); return 1; }
-
-    fprintf(stderr, "[GPU] File: %s  Size: %ld bytes  Chunk Size: %ld bytes  Chunks (threads): %ld  Runs: %d\n",
-            filepath, file_bytes, chunk_size, num_chunks, runs);
+    fprintf(stderr, "[GPU v1] File: %s (%zu B) | C: %zu B | N: %zu | B: %zu | Staging: %s | OutMode: %s | Runs: %d\n",
+            filepath, file_bytes, chunk_size, num_chunks, blocks_per_chunk,
+            (stg_mode == STAGING_PINNED) ? "PINNED" : "PAGEABLE",
+            (out_mode == OUTPUT_MODE_FULL) ? "FULL" : "REDUCE", runs);
 
     /* Allocate device buffers */
-    uint8_t *d_in, *d_out;
+    uint8_t *d_in, *d_out, *d_reduced;
     checkCudaErrors(cudaMalloc(&d_in, file_bytes));
     checkCudaErrors(cudaMalloc(&d_out, num_chunks * 32));
+    checkCudaErrors(cudaMalloc(&d_reduced, 32));
+
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (int)((num_chunks + threadsPerBlock - 1) / threadsPerBlock);
 
     for (int r = 0; r < runs; r++) {
-        // Measure end-to-end (including Host-to-Device and Device-to-Host transfer)
-        cudaEvent_t start_total, stop_total;
-        cudaEventCreate(&start_total);
-        cudaEventCreate(&stop_total);
-        cudaEventRecord(start_total);
+        /* ── Measure kernel-only time ── */
+        checkCudaErrors(cudaMemcpy(d_in, (stg_mode == STAGING_PINNED) ? h_in : h_in, file_bytes, cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaDeviceSynchronize());
 
-        // Copy input to GPU
-        checkCudaErrors(cudaMemcpy(d_in, h_in, file_bytes, cudaMemcpyHostToDevice));
-
-        // Measure GPU execution time only
         cudaEvent_t start_kernel, stop_kernel;
-        cudaEventCreate(&start_kernel);
-        cudaEventCreate(&stop_kernel);
-        cudaEventRecord(start_kernel);
+        checkCudaErrors(cudaEventCreate(&start_kernel));
+        checkCudaErrors(cudaEventCreate(&stop_kernel));
+        checkCudaErrors(cudaEventRecord(start_kernel));
 
-        int threadsPerBlock = 256;
-        int blocksPerGrid = (num_chunks + threadsPerBlock - 1) / threadsPerBlock;
-
-        sha256_kernel<<<blocksPerGrid, threadsPerBlock>>>(d_in, d_out, chunk_size, num_chunks);
+        sha256_kernel_v1<<<blocksPerGrid, threadsPerBlock>>>(d_in, d_out, chunk_size, num_chunks);
         checkCudaErrors(cudaGetLastError());
 
-        cudaEventRecord(stop_kernel);
-        cudaEventSynchronize(stop_kernel);
+        checkCudaErrors(cudaEventRecord(stop_kernel));
+        checkCudaErrors(cudaEventSynchronize(stop_kernel));
 
         float ms_kernel = 0;
-        cudaEventElapsedTime(&ms_kernel, start_kernel, stop_kernel);
+        checkCudaErrors(cudaEventElapsedTime(&ms_kernel, start_kernel, stop_kernel));
         double time_kernel_s = ms_kernel / 1000.0;
+        checkCudaErrors(cudaEventDestroy(start_kernel));
+        checkCudaErrors(cudaEventDestroy(stop_kernel));
 
-        // Copy outputs back to Host
-        checkCudaErrors(cudaMemcpy(h_out, d_out, num_chunks * 32, cudaMemcpyDeviceToHost));
+        /* ── Measure E2E time ── */
+        checkCudaErrors(cudaDeviceSynchronize());
 
-        cudaEventRecord(stop_total);
-        cudaEventSynchronize(stop_total);
+        cudaEvent_t start_total, stop_total;
+        checkCudaErrors(cudaEventCreate(&start_total));
+        checkCudaErrors(cudaEventCreate(&stop_total));
+        checkCudaErrors(cudaEventRecord(start_total));
+
+        const uint8_t *src_h2d = h_in;
+        if (stg_mode == STAGING_PAGEABLE) {
+            /* Pageable to pinned staging copy included in E2E */
+            memcpy(h_pinned_stage, h_in, file_bytes);
+            src_h2d = h_pinned_stage;
+        }
+
+        checkCudaErrors(cudaMemcpy(d_in, src_h2d, file_bytes, cudaMemcpyHostToDevice));
+
+        sha256_kernel_v1<<<blocksPerGrid, threadsPerBlock>>>(d_in, d_out, chunk_size, num_chunks);
+        checkCudaErrors(cudaGetLastError());
+
+        uint8_t h_reduced[32];
+        if (out_mode == OUTPUT_MODE_FULL) {
+            checkCudaErrors(cudaMemcpy(h_out, d_out, num_chunks * 32, cudaMemcpyDeviceToHost));
+        } else {
+            checkCudaErrors(cudaMemset(d_reduced, 0, 32));
+            xor_reduce_kernel<<<64, 256>>>(d_out, d_reduced, num_chunks);
+            checkCudaErrors(cudaMemcpy(h_reduced, d_reduced, 32, cudaMemcpyDeviceToHost));
+        }
+
+        checkCudaErrors(cudaEventRecord(stop_total));
+        checkCudaErrors(cudaEventSynchronize(stop_total));
 
         float ms_total = 0;
-        cudaEventElapsedTime(&ms_total, start_total, stop_total);
+        checkCudaErrors(cudaEventElapsedTime(&ms_total, start_total, stop_total));
         double time_total_s = ms_total / 1000.0;
+        checkCudaErrors(cudaEventDestroy(start_total));
+        checkCudaErrors(cudaEventDestroy(stop_total));
 
-        // Clean events
-        cudaEventDestroy(start_kernel);
-        cudaEventDestroy(stop_kernel);
-        cudaEventDestroy(start_total);
-        cudaEventDestroy(stop_total);
+        double tput_kernel_gbs = ((double)payload_bytes / time_kernel_s) / 1e9;
+        double tput_e2e_gbs = ((double)payload_bytes / time_total_s) / 1e9;
+        double hashes_per_sec = (double)num_chunks / time_total_s;
+        double blocks_per_sec = ((double)num_chunks * (double)blocks_per_chunk) / time_total_s;
 
-        // Create hex hash for the first chunk for validation
-        char hash_hex[65];
-        for (int i = 0; i < 32; i++) {
-            sprintf(hash_hex + i*2, "%02x", h_out[i]);
+        char hex_chunk0[65];
+        digest_to_hex(h_out, hex_chunk0);
+
+        char hex_reduced[65] = "none";
+        if (out_mode == OUTPUT_MODE_REDUCE) {
+            digest_to_hex(h_reduced, hex_reduced);
         }
-        hash_hex[64] = '\0';
 
-        double tput_kernel = ((double)file_bytes / (1024.0 * 1024.0)) / time_kernel_s;
-        double tput_total = ((double)file_bytes / (1024.0 * 1024.0)) / time_total_s;
-
-        printf("RUN %d TIME_KERNEL_S %.6f TIME_TOTAL_S %.6f THROUGHPUT_KERNEL_MBS %.3f THROUGHPUT_TOTAL_MBS %.3f CHUNK_0_HASH %s\n",
-               r+1, time_kernel_s, time_total_s, tput_kernel, tput_total, hash_hex);
+        printf("RUN %d TIME_KERNEL_S %.6f TIME_E2E_S %.6f THROUGHPUT_KERNEL_GBS %.6f THROUGHPUT_E2E_GBS %.6f HASHES_PER_SEC %.2f BLOCKS_PER_SEC %.2f CHUNK_0_HASH %s REDUCED_HASH %s\n",
+               r + 1, time_kernel_s, time_total_s, tput_kernel_gbs, tput_e2e_gbs, hashes_per_sec, blocks_per_sec, hex_chunk0, hex_reduced);
         fflush(stdout);
+    }
+
+    if (save_digests_path && out_mode == OUTPUT_MODE_FULL) {
+        fprintf(stderr, "[GPU v1] Saving full digests (%zu bytes) to '%s'...\n", num_chunks * 32, save_digests_path);
+        save_digests_file(save_digests_path, h_out, num_chunks * 32);
     }
 
     checkCudaErrors(cudaFree(d_in));
     checkCudaErrors(cudaFree(d_out));
-    free(h_in);
-    free(h_out);
+    checkCudaErrors(cudaFree(d_reduced));
+    checkCudaErrors(cudaFreeHost(h_out));
+    if (stg_mode == STAGING_PINNED) checkCudaErrors(cudaFreeHost(h_in));
+    else { free(h_in); checkCudaErrors(cudaFreeHost(h_pinned_stage)); }
 
     return 0;
 }

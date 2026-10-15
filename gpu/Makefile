@@ -1,51 +1,38 @@
 # ─────────────────────────────────────────────────────────────────────
-#  Makefile — SHA-256 GPU (CUDA) Benchmark
-#  Targets: all | run | verify | clean
+#  Makefile — SHA-256 GPU (CUDA) Benchmark (v1 and v2)
 # ─────────────────────────────────────────────────────────────────────
 
-NVCC     := nvcc
-NVCCFLAGS := -O3 -arch=sm_86 -std=c++11
+NVCC      := nvcc
+NVCCFLAGS := -O3 -arch=sm_86 -std=c++11 -Xptxas -v
 
-FILE     ?= ../dummy_1GB.bin
-RUNS     ?= 5
+FILE      ?= ../dummy_1GB.bin
+RUNS      ?= 5
 
-.PHONY: all clean run verify
+.PHONY: all clean run verify v1 v2
 
-all: sha256_gpu
+all: v1 v2
 	@echo ""
-	@echo "  Build complete:"
-	@echo "    sha256_gpu  — CUDA parallel SHA-256 binary"
-	@echo ""
-	@echo "  Run:       make run"
+	@echo "  GPU binaries built successfully:"
+	@echo "    sha256_gpu    — Kernel v1 baseline (w[64])"
+	@echo "    sha256_gpu_v2 — Kernel v2 high-utilization (w[16], --maxrregcount=48, 3 streams)"
 	@echo ""
 
-sha256_gpu: sha256_gpu.cu
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
-	@echo "  [✓] sha256_gpu compiled successfully  ($(NVCCFLAGS))"
+v1: sha256_gpu
+v2: sha256_gpu_v2
 
-run: all
+sha256_gpu: sha256_gpu.cu ../common/workload.h ../common/nist_vectors.h
 	@mkdir -p results
-	python3 benchmark_gpu.py --file $(FILE) --runs $(RUNS)
+	$(NVCC) $(NVCCFLAGS) -o $@ $< 2> results/ptxas_v1.log
+	@cat results/ptxas_v1.log
+	@echo "  [✓] sha256_gpu compiled successfully (logged to results/ptxas_v1.log)"
 
-# ─── Quick validation check: compare GPU chunk 0 hash with CPU/openssl ────────
-verify: sha256_gpu
-	@echo ""
-	@echo "  Verifying GPU output correctness against CPU sha256sum..."
-	@echo ""
-	@# We extract the first chunk of 64KB (65536 bytes) of the file
-	@# and check its hash using system sha256sum.
-	@REF_HASH=$$(dd if=$(FILE) bs=64K count=1 2>/dev/null | sha256sum | awk '{print $$1}'); \
-	 GPU_HASH=$$(./sha256_gpu $(FILE) 65536 1 2>/dev/null | grep "^RUN" | head -1 | awk '{print $$NF}'); \
-	 echo "  Reference (dd | sha256sum): $$REF_HASH"; \
-	 echo "  GPU chunk 0 (sha256_gpu):   $$GPU_HASH"; \
-	 if [ "$$REF_HASH" = "$$GPU_HASH" ]; then \
-	   echo "  ✓ GPU hashing correctness verified successfully!"; \
-	 else \
-	   echo "  ✗ HASH MISMATCH! Check implementation."; exit 1; \
-	   exit 1; \
-	 fi
+sha256_gpu_v2: sha256_gpu_v2.cu ../common/workload.h ../common/nist_vectors.h
+	@mkdir -p results
+	$(NVCC) $(NVCCFLAGS) --maxrregcount=48 -o $@ $< 2> results/ptxas_v2.log
+	@cat results/ptxas_v2.log
+	@echo "  [✓] sha256_gpu_v2 compiled successfully (logged to results/ptxas_v2.log)"
 
 clean:
-	rm -f sha256_gpu
+	rm -f sha256_gpu sha256_gpu_v2
 	rm -rf results
 	@echo "  Cleaned GPU folder."

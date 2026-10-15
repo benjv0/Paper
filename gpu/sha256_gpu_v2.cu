@@ -1,24 +1,23 @@
 /*
- * sha256_gpu_v2.cu — High-Utilization CUDA SHA-256 Benchmark
- * ===========================================================
+ * sha256_gpu_v2.cu — High-Utilization CUDA SHA-256 Benchmark (Kernel v2)
+ * =======================================================================
  * Target: NVIDIA GeForce RTX 2050 (GA107M, sm_86)
- *   16 SMs | 1536 max threads/SM | 48 warps/SM | 65536 regs/SM | 94.4 GB/s GDDR6
  *
- * Key optimizations vs v1:
+ * 8 Architectural Optimizations vs v1:
  *  1. __constant__ K[64]           — warp-broadcast, zero L2 cache pressure
- *  2. Sliding-window w[16] not w[64] — saves 48 registers/thread:
- *       v1: ~100 regs/thread → 2 blocks/SM → 33% occupancy
- *       v2: ~34  regs/thread → 5+ blocks/SM → 83%+ occupancy
+ *  2. Sliding-window w[16] not w[64] — saves 48 registers/thread (occupancy 33% -> 83%)
  *  3. __byte_perm() big-endian load  — 1 PTX instruction instead of 4 shifts
  *  4. #pragma unroll on all 64 rounds — zero loop overhead, max ILP
- *  5. Zero-copy padding block        — w[] computed inline, no local memory needed
+ *  5. Inline padding block          — w[] computed inline, zero stack/local spill
  *  6. Grid-stride loop kernel        — always saturates all 16 SMs
  *  7. Pinned (page-locked) host mem  — enables async DMA via cudaMemcpyAsync
  *  8. Triple CUDA streams            — overlaps H2D, compute, D2H simultaneously
  *
- * Usage:  ./sha256_gpu_v2 <file> <chunk_size> [runs]
- *         chunk_size MUST be a multiple of 64 bytes.
- *         Recommended: 4096, 16384, 65536, 262144 (4KB, 16KB, 64KB, 256KB)
+ * Parameters:
+ *  --chunk-size <C> : chunk size (bytes)
+ *  --batch-size <B> : stream batch size (bytes), default 64 MiB
+ *  --output-mode {full, reduce} : full (Nx32 B) or device reduction (32 B)
+ *  --staging {pinned, pageable}
  */
 
 #include <stdio.h>
@@ -27,7 +26,9 @@
 #include <string.h>
 #include <cuda_runtime.h>
 
-/* ── SHA-256 macros ────────────────────────────────────────────────────────── */
+#include "../common/workload.h"
+#include "../common/nist_vectors.h"
+
 #define ROTR32(x,n)  (((x) >> (n)) | ((x) << (32-(n))))
 #define CH(x,y,z)    (((x) & (y)) ^ (~(x) & (z)))
 #define MAJ(x,y,z)   (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
@@ -36,8 +37,7 @@
 #define SIG0(x)      (ROTR32((x), 7) ^ ROTR32((x),18) ^ ((x) >> 3))
 #define SIG1(x)      (ROTR32((x),17) ^ ROTR32((x),19) ^ ((x) >> 10))
 
-/* Optimization 1: K in __constant__ memory — one hardware broadcast per warp    */
-/* All 32 threads in a warp read K_CONST[i] simultaneously → single transaction  */
+/* Opt 1: K in __constant__ memory */
 __constant__ uint32_t K_CONST[64] = {
     0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,
     0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
@@ -57,46 +57,28 @@ __constant__ uint32_t K_CONST[64] = {
     0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
 };
 
-/* SHA-256 IV in __constant__ memory                                              */
+/* SHA-256 IV in __constant__ memory */
 __constant__ uint32_t SHA256_IV[8] = {
     0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,
     0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u
 };
 
-/* ── Optimized SHA-256 block compression ──────────────────────────────────────
- *
- * Optimization 2: Sliding window w[16] (circular buffer) instead of w[64].
- *   Standard SHA-256 expands the 16-word message into 64 words. We avoid storing
- *   all 64 by updating in-place: w[i % 16] becomes w[i] the moment w[i-16] is
- *   no longer needed. This saves 48 × 4 = 192 bytes = 48 registers per thread.
- *
- * Optimization 3: __byte_perm() for big-endian word load.
- *   On little-endian x86/CUDA hosts, a raw uint32 load reverses byte order vs
- *   the SHA-256 big-endian specification. __byte_perm() corrects this in exactly
- *   one PTX instruction (sel.b32) rather than four shifts and three ORs.
- *   Selector 0x0123 maps: out[byte 0] ← in[byte 3], ..., out[byte 3] ← in[byte 0]
- *
- * Optimization 4: #pragma unroll exposes all 64 rounds as straight-line code,
- *   enabling the compiler to maximise instruction-level parallelism and eliminate
- *   branch misprediction penalties.
- * ─────────────────────────────────────────────────────────────────────────── */
-__device__ static __forceinline__ void sha256_compress(
+/* Opt 2, 3, 4: Sliding window w[16], __byte_perm(), #pragma unroll */
+__device__ static __forceinline__ void sha256_compress_v2(
     uint32_t s[8], const uint8_t *blk)
 {
-    uint32_t w[16];   /* 16 registers instead of 64 — the key saving */
+    uint32_t w[16];
 
-    /* Load 16 big-endian SHA-256 message words with a single PTX instruction */
     #pragma unroll 16
     for (int i = 0; i < 16; ++i) {
         uint32_t raw;
         memcpy(&raw, blk + i * 4, 4);
-        w[i] = __byte_perm(raw, 0u, 0x0123u);  /* byte-swap: 1 instruction */
+        w[i] = __byte_perm(raw, 0u, 0x0123u);
     }
 
     uint32_t a=s[0],b=s[1],c=s[2],d=s[3],e=s[4],f=s[5],g=s[6],h=s[7];
     uint32_t t1, t2;
 
-    /* Rounds 0–15: message schedule already in w[0..15] */
     #pragma unroll 16
     for (int i = 0; i < 16; ++i) {
         t1 = h + EP1(e) + CH(e,f,g) + K_CONST[i] + w[i];
@@ -104,10 +86,6 @@ __device__ static __forceinline__ void sha256_compress(
         h=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
     }
 
-    /* Rounds 16–63: expand message schedule in the sliding window.
-     * w[j] (j = i & 15) holds w[i-16] before the assignment and w[i] after.
-     * All prior values needed (w[i-2], w[i-7], w[i-15]) are already updated
-     * in earlier iterations, so the circular addressing is always correct.   */
     #pragma unroll 48
     for (int i = 16; i < 64; ++i) {
         const int j = i & 15;
@@ -121,13 +99,8 @@ __device__ static __forceinline__ void sha256_compress(
     s[4]+=e; s[5]+=f; s[6]+=g; s[7]+=h;
 }
 
-/* Optimization 5: Padding block computed inline using known uint32 values.
- * When chunk_size is a multiple of 64 the data fills an integer number of
- * SHA-256 blocks exactly, so the padding block is always:
- *   w[0] = 0x80000000 | w[1..13] = 0 | w[14] = bit_len_hi | w[15] = bit_len_lo
- * We materialise this as a local w[] array and call a specialised compressor,
- * avoiding any local-memory (stack) byte buffer.                               */
-__device__ static __forceinline__ void sha256_compress_padding(
+/* Opt 5: Inline padding block */
+__device__ static __forceinline__ void sha256_compress_padding_v2(
     uint32_t s[8], uint64_t byte_len)
 {
     const uint64_t bits = byte_len * 8ull;
@@ -159,244 +132,309 @@ __device__ static __forceinline__ void sha256_compress_padding(
     s[4]+=e; s[5]+=f; s[6]+=g; s[7]+=h;
 }
 
-/* Helper: write uint32 big-endian into byte buffer */
-__device__ static __forceinline__ void write_be32(uint8_t *p, uint32_t v)
+__device__ static __forceinline__ void write_be32_v2(uint8_t *p, uint32_t v)
 {
     p[0]=(v>>24)&0xff; p[1]=(v>>16)&0xff; p[2]=(v>>8)&0xff; p[3]=v&0xff;
 }
 
-/* ── Main CUDA kernel ──────────────────────────────────────────────────────────
- *
- * Optimization 6: Grid-stride loop.
- *   Instead of launching exactly one thread per chunk (which may leave SMs idle
- *   at the tail), we launch a FIXED number of threads equal to the GPU's maximum
- *   concurrent occupancy and have each thread process multiple chunks in a stride.
- *   This guarantees that all 16 SMs are always occupied, from first to last chunk.
- * ─────────────────────────────────────────────────────────────────────────── */
+/* Opt 6: Grid-stride loop */
 __global__ void sha256_kernel_v2(
     const uint8_t * __restrict__ d_in,
     uint8_t       * __restrict__ d_out,
-    int chunk_size,         /* bytes per chunk; must be multiple of 64 */
-    int num_blocks_data,    /* SHA-256 blocks per chunk = chunk_size / 64 */
+    long chunk_size,
+    int num_blocks_data,
     long num_chunks)
 {
-    /* Grid-stride: each thread steps by the total number of launched threads */
     for (long idx = (long)blockIdx.x * blockDim.x + threadIdx.x;
          idx < num_chunks;
          idx += (long)gridDim.x * blockDim.x)
     {
-        /* Initialise SHA-256 state from IV */
         uint32_t s[8];
         #pragma unroll 8
         for (int i = 0; i < 8; ++i) s[i] = SHA256_IV[i];
 
-        /* Process all data blocks for this chunk */
         const uint8_t *src = d_in + (long)idx * chunk_size;
         for (int b = 0; b < num_blocks_data; ++b)
-            sha256_compress(s, src + (long)b * 64);
+            sha256_compress_v2(s, src + (long)b * 64);
 
-        /* Process the deterministic SHA-256 padding block */
-        sha256_compress_padding(s, (uint64_t)chunk_size);
+        sha256_compress_padding_v2(s, (uint64_t)chunk_size);
 
-        /* Write 32-byte output hash (big-endian) */
         uint8_t *out = d_out + (long)idx * 32;
         #pragma unroll 8
-        for (int i = 0; i < 8; ++i) write_be32(out + i*4, s[i]);
+        for (int i = 0; i < 8; ++i) write_be32_v2(out + i*4, s[i]);
     }
 }
 
-/* ── CUDA error checking helper ───────────────────────────────────────────── */
+__global__ void xor_reduce_kernel_v2(const uint8_t * __restrict__ d_in, uint8_t * __restrict__ d_out, long num_chunks) {
+    uint32_t local[8] = {0};
+    for (long idx = (long)blockIdx.x * blockDim.x + threadIdx.x;
+         idx < num_chunks;
+         idx += (long)gridDim.x * blockDim.x)
+    {
+        const uint32_t *src = (const uint32_t *)(d_in + idx * 32);
+        #pragma unroll 8
+        for (int i = 0; i < 8; i++) local[i] ^= src[i];
+    }
+
+    for (int offset = 16; offset > 0; offset /= 2) {
+        #pragma unroll 8
+        for (int i = 0; i < 8; i++) local[i] ^= __shfl_down_sync(0xffffffff, local[i], offset);
+    }
+
+    if ((threadIdx.x & 31) == 0) {
+        uint32_t *d32 = (uint32_t *)d_out;
+        #pragma unroll 8
+        for (int i = 0; i < 8; i++) atomicXor(&d32[i], local[i]);
+    }
+}
+
 #define CUDA_CHECK(v) cuda_check_((v),#v,__FILE__,__LINE__)
-static void cuda_check_(cudaError_t r, const char *f, const char *file, int line)
+static inline void cuda_check_(cudaError_t r, const char *f, const char *file, int line)
 {
     if (r != cudaSuccess) {
-        fprintf(stderr,"CUDA error at %s:%d  %s\n  → %s\n",
+        fprintf(stderr,"CUDA error at %s:%d  %s\n  -> %s\n",
                 file, line, f, cudaGetErrorString(r));
         exit(1);
     }
 }
 
-/* ── Main ─────────────────────────────────────────────────────────────────── */
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <file> <chunk_size> [runs]\n", argv[0]);
-        fprintf(stderr, "  chunk_size must be a multiple of 64 bytes.\n");
-        return 1;
-    }
+    const char *filepath = "dummy_1GB.bin";
+    size_t chunk_sz = 64;
+    int runs = 5;
+    OutputMode out_mode = OUTPUT_MODE_FULL;
+    StagingMode stg_mode = STAGING_PINNED;
+    size_t batch_size_bytes = 64 * 1024 * 1024; /* 64 MiB default */
+    const char *save_digests_path = NULL;
 
-    const char *filepath  = argv[1];
-    int         chunk_sz  = atoi(argv[2]);
-    int         runs      = (argc >= 4) ? atoi(argv[3]) : 5;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--file") == 0 && i + 1 < argc) {
+            filepath = argv[++i];
+        } else if (strcmp(argv[i], "--chunk-size") == 0 && i + 1 < argc) {
+            chunk_sz = (size_t)atol(argv[++i]);
+        } else if (strcmp(argv[i], "--batch-size") == 0 && i + 1 < argc) {
+            batch_size_bytes = (size_t)atol(argv[++i]);
+        } else if (strcmp(argv[i], "--output-mode") == 0 && i + 1 < argc) {
+            if (strcmp(argv[i+1], "reduce") == 0) out_mode = OUTPUT_MODE_REDUCE;
+            else out_mode = OUTPUT_MODE_FULL;
+            i++;
+        } else if (strcmp(argv[i], "--staging") == 0 && i + 1 < argc) {
+            if (strcmp(argv[i+1], "pageable") == 0) stg_mode = STAGING_PAGEABLE;
+            else stg_mode = STAGING_PINNED;
+            i++;
+        } else if (strcmp(argv[i], "--runs") == 0 && i + 1 < argc) {
+            runs = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--save-digests") == 0 && i + 1 < argc) {
+            save_digests_path = argv[++i];
+        } else if (argv[i][0] != '-' && i == 1) {
+            /* Support legacy positional arguments: <file> <chunk_size> [runs] */
+            filepath = argv[1];
+            if (i + 1 < argc && argv[i+1][0] != '-') chunk_sz = (size_t)atol(argv[++i]);
+            if (i + 1 < argc && argv[i+1][0] != '-') runs = atoi(argv[++i]);
+        }
+    }
 
     if (chunk_sz < 64 || chunk_sz % 64 != 0) {
-        fprintf(stderr, "Error: chunk_size=%d is not a multiple of 64.\n", chunk_sz);
+        fprintf(stderr, "Error: chunk_size=%zu is not a multiple of 64.\n", chunk_sz);
         return 1;
     }
-    const int blocks_per_chunk = chunk_sz / 64;
+    const int blocks_per_chunk = (int)(chunk_sz / 64);
+    const size_t total_blocks_per_chunk = compute_blocks_per_chunk(chunk_sz);
 
-    /* Open and read file */
     FILE *fp = fopen(filepath, "rb");
     if (!fp) { perror("fopen"); return 1; }
     fseek(fp, 0, SEEK_END);
-    long file_bytes = ftell(fp);
+    size_t file_bytes = (size_t)ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    long num_chunks = file_bytes / chunk_sz;
+    size_t num_chunks = file_bytes / chunk_sz;
     if (num_chunks < 1) {
-        fprintf(stderr, "File too small for chunk_size=%d\n", chunk_sz);
+        fprintf(stderr, "File too small for chunk_size=%zu\n", chunk_sz);
         fclose(fp); return 1;
     }
-    long used_bytes = num_chunks * (long)chunk_sz;
+    size_t used_bytes = num_chunks * chunk_sz;
 
-    /* Optimization 7: Pinned (page-locked) host memory
-     * cudaMallocHost allocates memory that bypasses the OS virtual memory system,
-     * allowing the GPU's DMA engine to access it directly without a staging copy.
-     * This increases practical PCIe bandwidth by up to 2× for async transfers.  */
-    uint8_t *h_in, *h_out;
-    CUDA_CHECK(cudaMallocHost(&h_in,  used_bytes));
+    /* Allocate host buffers */
+    uint8_t *h_in = NULL;
+    uint8_t *h_pinned_stage = NULL;
+    uint8_t *h_out = NULL;
+
+    if (stg_mode == STAGING_PINNED) {
+        CUDA_CHECK(cudaMallocHost(&h_in, used_bytes));
+    } else {
+        h_in = (uint8_t *)malloc(used_bytes);
+        CUDA_CHECK(cudaMallocHost(&h_pinned_stage, used_bytes));
+    }
     CUDA_CHECK(cudaMallocHost(&h_out, num_chunks * 32));
 
-    fread(h_in, 1, used_bytes, fp);
+    size_t rb = fread(h_in, 1, used_bytes, fp);
     fclose(fp);
+    if (rb != used_bytes) {
+        fprintf(stderr, "Error reading file\n");
+        return 1;
+    }
 
     /* Device buffers */
-    uint8_t *d_in, *d_out;
+    uint8_t *d_in, *d_out, *d_reduced;
     CUDA_CHECK(cudaMalloc(&d_in,  used_bytes));
     CUDA_CHECK(cudaMalloc(&d_out, num_chunks * 32));
+    CUDA_CHECK(cudaMalloc(&d_reduced, 32));
 
-    /* Query GPU occupancy parameters */
     cudaDeviceProp prop;
     CUDA_CHECK(cudaGetDeviceProperties(&prop, 0));
 
-    /* Choose launch configuration:
-     *   Target 100% occupancy on all SMs.
-     *   With ~34 live registers/thread + maxrregcount=48: 5 blocks/SM achievable.
-     *   We launch enough blocks to keep all SMs busy, and grid-stride handles
-     *   any remaining chunks beyond the initially launched thread count.         */
     const int THREADS_PER_BLOCK = 256;
-    /* 5 resident blocks per SM (based on register budget) × all SMs × 2× safety margin */
     int min_blocks = prop.multiProcessorCount * 5 * 2;
     long needed_blocks = (num_chunks + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     int grid_size = (int)(needed_blocks > min_blocks ? needed_blocks : min_blocks);
-    /* Cap at hardware maximum to avoid scheduler overhead */
     int max_blocks = prop.multiProcessorCount * prop.maxThreadsPerMultiProcessor / THREADS_PER_BLOCK;
     if (grid_size > max_blocks * 4) grid_size = max_blocks * 4;
 
     fprintf(stderr,
-        "[GPU v2] File: %ld B | Chunk: %d B | Chunks: %ld | "
-        "Grid: %d blocks × %d threads | SMs: %d\n",
-        file_bytes, chunk_sz, num_chunks,
-        grid_size, THREADS_PER_BLOCK, prop.multiProcessorCount);
+        "[GPU v2] File: %s (%zu B) | C: %zu B | N: %zu | B: %zu | Grid: %d x %d | SMs: %d | BatchSize: %zu B | Staging: %s | OutMode: %s | Runs: %d\n",
+        filepath, file_bytes, chunk_sz, num_chunks, total_blocks_per_chunk,
+        grid_size, THREADS_PER_BLOCK, prop.multiProcessorCount, batch_size_bytes,
+        (stg_mode == STAGING_PINNED) ? "PINNED" : "PAGEABLE",
+        (out_mode == OUTPUT_MODE_FULL) ? "FULL" : "REDUCE", runs);
 
-    /* Optimization 8: Triple CUDA streams
-     * By dividing the workload into 3 equal segments and assigning each segment
-     * to a different CUDA stream, we create a pipeline where:
-     *   - Stream 0: H2D transfer of segment 0 → kernel on segment 0 → D2H
-     *   - Stream 1: overlapping with S0 kernel: H2D segment 1 → kernel → D2H
-     *   - Stream 2: same pattern, one pipeline stage behind S1
-     * The RTX 2050 has independent Copy Engines for H2D and D2H, so data transfer
-     * and kernel execution can proceed concurrently on separate engines.          */
+    /* Opt 8: Triple CUDA streams */
     const int N_STREAMS = 3;
     cudaStream_t streams[N_STREAMS];
     for (int s = 0; s < N_STREAMS; ++s)
         CUDA_CHECK(cudaStreamCreate(&streams[s]));
 
-    long chunks_per_stream = (num_chunks + N_STREAMS - 1) / N_STREAMS;
+    /* Calculate batch chunk count based on batch_size_bytes */
+    size_t chunks_per_batch = batch_size_bytes / chunk_sz;
+    if (chunks_per_batch < 1) chunks_per_batch = 1;
+    size_t total_batches = (num_chunks + chunks_per_batch - 1) / chunks_per_batch;
 
     for (int r = 0; r < runs; ++r) {
-
-        /* ── Measure kernel-only time (pre-copy data, then time just the kernel) ── */
+        /* ── Measure kernel-only time ── */
         CUDA_CHECK(cudaMemcpy(d_in, h_in, used_bytes, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaDeviceSynchronize());
 
         cudaEvent_t k_start, k_stop;
-        cudaEventCreate(&k_start);
-        cudaEventCreate(&k_stop);
-        cudaEventRecord(k_start, 0);
+        CUDA_CHECK(cudaEventCreate(&k_start));
+        CUDA_CHECK(cudaEventCreate(&k_stop));
+        CUDA_CHECK(cudaEventRecord(k_start, 0));
 
         sha256_kernel_v2<<<grid_size, THREADS_PER_BLOCK>>>(
             d_in, d_out, chunk_sz, blocks_per_chunk, num_chunks);
 
-        cudaEventRecord(k_stop, 0);
-        cudaEventSynchronize(k_stop);
+        CUDA_CHECK(cudaEventRecord(k_stop, 0));
+        CUDA_CHECK(cudaEventSynchronize(k_stop));
         float ms_kernel;
-        cudaEventElapsedTime(&ms_kernel, k_start, k_stop);
+        CUDA_CHECK(cudaEventElapsedTime(&ms_kernel, k_start, k_stop));
         double time_kernel_s = ms_kernel / 1000.0;
-        cudaEventDestroy(k_start);
-        cudaEventDestroy(k_stop);
+        CUDA_CHECK(cudaEventDestroy(k_start));
+        CUDA_CHECK(cudaEventDestroy(k_stop));
 
-        /* ── Measure E2E time with triple-stream pipeline ── */
+        /* ── Measure E2E time with pipelined streams ── */
         CUDA_CHECK(cudaDeviceSynchronize());
 
         cudaEvent_t e_start, e_stop;
-        cudaEventCreate(&e_start);
-        cudaEventCreate(&e_stop);
-        cudaEventRecord(e_start, 0);   /* record on default stream (after sync) */
+        CUDA_CHECK(cudaEventCreate(&e_start));
+        CUDA_CHECK(cudaEventCreate(&e_stop));
+        CUDA_CHECK(cudaEventRecord(e_start, 0));
 
-        for (int s = 0; s < N_STREAMS; ++s) {
-            long start_c = (long)s * chunks_per_stream;
-            long end_c   = start_c + chunks_per_stream;
+        uint8_t *src_h2d_base = h_in;
+        if (stg_mode == STAGING_PAGEABLE) {
+            /* Pageable -> pinned copy */
+            memcpy(h_pinned_stage, h_in, used_bytes);
+            src_h2d_base = h_pinned_stage;
+        }
+
+        if (out_mode == OUTPUT_MODE_REDUCE) {
+            CUDA_CHECK(cudaMemset(d_reduced, 0, 32));
+        }
+
+        for (size_t b = 0; b < total_batches; ++b) {
+            int s = (int)(b % N_STREAMS);
+            size_t start_c = b * chunks_per_batch;
+            size_t end_c   = start_c + chunks_per_batch;
             if (end_c > num_chunks) end_c = num_chunks;
-            if (start_c >= num_chunks) break;
-            long n_c = end_c - start_c;
+            size_t n_c = end_c - start_c;
 
-            long byte_off = start_c * (long)chunk_sz;
-            long byte_len = n_c    * (long)chunk_sz;
-            long hash_off = start_c * 32L;
-            long hash_len = n_c    * 32L;
+            size_t byte_off = start_c * chunk_sz;
+            size_t byte_len = n_c    * chunk_sz;
+            size_t hash_off = start_c * 32L;
+            size_t hash_len = n_c    * 32L;
 
-            /* Async H2D for this segment */
-            CUDA_CHECK(cudaMemcpyAsync(d_in  + byte_off, h_in  + byte_off,
+            /* Async H2D */
+            CUDA_CHECK(cudaMemcpyAsync(d_in + byte_off, src_h2d_base + byte_off,
                                        byte_len, cudaMemcpyHostToDevice, streams[s]));
 
-            /* Kernel for this segment (after H2D in same stream) */
+            /* Kernel execution */
             int seg_blocks = (int)((n_c + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
             if (seg_blocks < prop.multiProcessorCount * 5)
                 seg_blocks = prop.multiProcessorCount * 5;
 
             sha256_kernel_v2<<<seg_blocks, THREADS_PER_BLOCK, 0, streams[s]>>>(
-                d_in  + byte_off,
-                d_out + hash_off,
-                chunk_sz, blocks_per_chunk, n_c);
+                d_in + byte_off, d_out + hash_off, chunk_sz, blocks_per_chunk, n_c);
 
-            /* Async D2H for this segment (after kernel in same stream) */
-            CUDA_CHECK(cudaMemcpyAsync(h_out + hash_off, d_out + hash_off,
-                                       hash_len, cudaMemcpyDeviceToHost, streams[s]));
+            /* D2H in full mode */
+            if (out_mode == OUTPUT_MODE_FULL) {
+                CUDA_CHECK(cudaMemcpyAsync(h_out + hash_off, d_out + hash_off,
+                                           hash_len, cudaMemcpyDeviceToHost, streams[s]));
+            }
+        }
+
+        uint8_t h_reduced[32];
+        if (out_mode == OUTPUT_MODE_REDUCE) {
+            /* Reduce on device across all digests */
+            CUDA_CHECK(cudaDeviceSynchronize());
+            xor_reduce_kernel_v2<<<64, 256>>>(d_out, d_reduced, num_chunks);
+            CUDA_CHECK(cudaMemcpy(h_reduced, d_reduced, 32, cudaMemcpyDeviceToHost));
         }
 
         CUDA_CHECK(cudaDeviceSynchronize());
-        cudaEventRecord(e_stop, 0);
-        cudaEventSynchronize(e_stop);
+        CUDA_CHECK(cudaEventRecord(e_stop, 0));
+        CUDA_CHECK(cudaEventSynchronize(e_stop));
         float ms_e2e;
-        cudaEventElapsedTime(&ms_e2e, e_start, e_stop);
+        CUDA_CHECK(cudaEventElapsedTime(&ms_e2e, e_start, e_stop));
         double time_e2e_s = ms_e2e / 1000.0;
-        cudaEventDestroy(e_start);
-        cudaEventDestroy(e_stop);
+        CUDA_CHECK(cudaEventDestroy(e_start));
+        CUDA_CHECK(cudaEventDestroy(e_stop));
 
-        /* Extract and print hash of first chunk for validation */
-        char hex[65];
-        for (int i = 0; i < 32; ++i)
-            sprintf(hex + i*2, "%02x", h_out[i]);
-        hex[64] = '\0';
+        char hex_chunk0[65];
+        if (out_mode == OUTPUT_MODE_FULL) {
+            digest_to_hex(h_out, hex_chunk0);
+        } else {
+            /* Copy chunk 0 for reporting */
+            uint8_t c0[32];
+            CUDA_CHECK(cudaMemcpy(c0, d_out, 32, cudaMemcpyDeviceToHost));
+            digest_to_hex(c0, hex_chunk0);
+        }
 
-        double tput_kernel = (used_bytes / 1048576.0) / time_kernel_s;
-        double tput_e2e    = (used_bytes / 1048576.0) / time_e2e_s;
+        char hex_reduced[65] = "none";
+        if (out_mode == OUTPUT_MODE_REDUCE) {
+            digest_to_hex(h_reduced, hex_reduced);
+        }
 
-        printf("RUN %d TIME_KERNEL_S %.6f TIME_TOTAL_S %.6f "
-               "THROUGHPUT_KERNEL_MBS %.3f THROUGHPUT_TOTAL_MBS %.3f "
-               "CHUNK_0_HASH %s\n",
-               r+1, time_kernel_s, time_e2e_s,
-               tput_kernel, tput_e2e, hex);
+        double tput_kernel_gbs = ((double)used_bytes / time_kernel_s) / 1e9;
+        double tput_e2e_gbs    = ((double)used_bytes / time_e2e_s) / 1e9;
+        double hashes_per_sec  = (double)num_chunks / time_e2e_s;
+        double blocks_per_sec  = ((double)num_chunks * (double)total_blocks_per_chunk) / time_e2e_s;
+
+        printf("RUN %d TIME_KERNEL_S %.6f TIME_E2E_S %.6f THROUGHPUT_KERNEL_GBS %.6f THROUGHPUT_E2E_GBS %.6f HASHES_PER_SEC %.2f BLOCKS_PER_SEC %.2f CHUNK_0_HASH %s REDUCED_HASH %s\n",
+               r + 1, time_kernel_s, time_e2e_s, tput_kernel_gbs, tput_e2e_gbs, hashes_per_sec, blocks_per_sec, hex_chunk0, hex_reduced);
         fflush(stdout);
+    }
+
+    if (save_digests_path && out_mode == OUTPUT_MODE_FULL) {
+        fprintf(stderr, "[GPU v2] Saving full digests (%zu bytes) to '%s'...\n", num_chunks * 32, save_digests_path);
+        save_digests_file(save_digests_path, h_out, num_chunks * 32);
     }
 
     /* Cleanup */
     for (int s = 0; s < N_STREAMS; ++s) CUDA_CHECK(cudaStreamDestroy(streams[s]));
     CUDA_CHECK(cudaFree(d_in));
     CUDA_CHECK(cudaFree(d_out));
-    CUDA_CHECK(cudaFreeHost(h_in));
+    CUDA_CHECK(cudaFree(d_reduced));
     CUDA_CHECK(cudaFreeHost(h_out));
+    if (stg_mode == STAGING_PINNED) CUDA_CHECK(cudaFreeHost(h_in));
+    else { free(h_in); CUDA_CHECK(cudaFreeHost(h_pinned_stage)); }
 
     return 0;
 }

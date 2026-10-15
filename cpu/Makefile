@@ -24,13 +24,14 @@ THREADS ?= 1 4 8
 
 .PHONY: all clean run run-sudo verify
 
-all: sha256_sw sha256_hw sha256_mt_sw sha256_mt_hw
+all: sha256_sw sha256_hw sha256_mt_sw sha256_mt_hw sha256_cpu_bench
 	@echo ""
 	@echo "  Build complete:"
-	@echo "    sha256_sw     — pure C, single-thread, no SHA-NI"
-	@echo "    sha256_hw     — OpenSSL + SHA-NI, single-thread"
-	@echo "    sha256_mt_sw  — pure C, multi-thread pthreads"
-	@echo "    sha256_mt_hw  — OpenSSL + SHA-NI, multi-thread pthreads"
+	@echo "    sha256_cpu_bench — unified chunked benchmark (Scalar C & SHA-NI intrinsics)"
+	@echo "    sha256_sw        — pure C, single-thread, no SHA-NI"
+	@echo "    sha256_hw        — OpenSSL + SHA-NI, single-thread"
+	@echo "    sha256_mt_sw     — pure C, multi-thread pthreads"
+	@echo "    sha256_mt_hw     — OpenSSL + SHA-NI, multi-thread pthreads"
 	@echo ""
 	@echo "  Run (no energy):   make run"
 	@echo "  Run (with RAPL):   make run-sudo"
@@ -53,6 +54,10 @@ sha256_mt_sw: sha256_mt_sw.c
 sha256_mt_hw: sha256_mt_hw.c
 	$(CC) $(HW_CFLAGS) -o $@ $< $(LDFLAGS) $(HW_LIBS) $(MT_LIBS)
 	@echo "  [✓] sha256_mt_hw"
+
+sha256_cpu_bench: sha256_cpu_bench.c sha256_scalar.h sha256_shani.h ../common/workload.h ../common/nist_vectors.h ../common/cpu_affinity.h
+	$(CC) -O3 -msha -msse4.1 -mssse3 -std=c11 -Wall -Wextra -o $@ $< -lpthread
+	@echo "  [✓] sha256_cpu_bench (SHA-NI + Scalar)"
 
 # ── Run without RAPL (no sudo needed) ───────────────────────────────
 run: all

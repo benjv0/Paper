@@ -4,10 +4,11 @@ run_benchmarks.py — Unified SHA-256 Benchmark Orchestrator
 ==========================================================
 Executes the comprehensive benchmarking suite across CPU and GPU:
 - Follows the rigorous protocol: 3s warmup + >=15s continuous execution loop x 5 runs.
-- Measures RAPL PKG energy (idle, gross, net), PL1/PL2, core frequencies.
-- Measures GPU kernel-only and E2E (pinned vs pageable), NVML power/energy if available.
-- Computes throughput [GB/s], hashes/s, blocks/s, J/GB, and speedups vs SHA-NI 4T and Scalar 1T.
-- Outputs results/benchmarks_raw.csv and results/benchmarks_summary.csv.
+- Measures RAPL PKG energy (idle, gross, net), PL1/PL2, real-time core frequencies under load.
+- Measures GPU kernel-only and E2E (pinned vs pageable), with nvidia-smi power polling (>=10 Hz)
+  and concurrent host RAPL PKG monitoring.
+- Computes throughput [GB/s], hashes/s, blocks/s, J/GB (device, net, con host), and speedups.
+- Outputs results/benchmarks_summary.csv.
 """
 
 import os
@@ -18,6 +19,7 @@ import argparse
 import math
 import statistics
 import csv
+import threading
 from typing import List, Dict, Optional, Tuple
 
 RAPL_PKG = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj"
@@ -62,6 +64,59 @@ def read_cpu_freqs(cores: List[int]) -> float:
             pass
     return statistics.mean(freqs) if freqs else 0.0
 
+class FreqSampler:
+    """Samples CPU frequencies in background during active benchmark execution."""
+    def __init__(self, cores: List[int], interval_s: float = 0.25):
+        self.cores = cores
+        self.interval_s = interval_s
+        self.samples: List[float] = []
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self._stop.is_set():
+            f = read_cpu_freqs(self.cores)
+            if f > 0:
+                self.samples.append(f)
+            time.sleep(self.interval_s)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self) -> float:
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+        return statistics.mean(self.samples) if self.samples else read_cpu_freqs(self.cores)
+
+def monitor_gpu_power_start():
+    """Starts nvidia-smi power sampling at 100 ms (10 Hz)."""
+    try:
+        return subprocess.Popen(
+            ["nvidia-smi", "--query-gpu=power.draw", "--format=csv,noheader,nounits", "-i", "0", "-lms", "100"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+    except Exception:
+        return None
+
+def monitor_gpu_power_stop(proc) -> List[float]:
+    """Stops power monitor process and extracts float power readings in Watts."""
+    if proc is None:
+        return []
+    proc.terminate()
+    try:
+        stdout, _ = proc.communicate(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, _ = proc.communicate()
+    readings = []
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        try:
+            readings.append(float(line))
+        except ValueError:
+            pass
+    return readings
+
 def measure_cpu_idle_power(duration: float = 10.0) -> Tuple[Optional[float], Optional[float]]:
     e0 = read_rapl_uj()
     if e0 is None:
@@ -99,10 +154,13 @@ class BenchmarkRunner:
         self.rapl_available = read_rapl_uj() is not None
         self.max_rapl_uj = read_rapl_max_uj()
 
-        if not self.rapl_available:
-            print("  [NOTICE] CPU RAPL is not directly readable without root (mode 0400).")
-            print("           Energy metrics (J/GB) will be recorded as N/A unless run with sudo")
-            print("           or permissions modified: 'sudo chmod 444 /sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj'.")
+        if self.rapl_available:
+            print("  [ENERGY] Intel RAPL PKG interface is active and readable.")
+            _, self.cpu_idle_power = measure_cpu_idle_power(5.0 if duration_s < 5.0 else 10.0)
+            print(f"  [ENERGY] Baseline CPU idle power: {self.cpu_idle_power:.2f} W" if self.cpu_idle_power else "  [ENERGY] Could not determine idle power.")
+        else:
+            print("  [NOTICE] CPU RAPL is not directly readable. Energy metrics will be N/A.")
+            self.cpu_idle_power = None
 
         self.raw_results = []
         self.summary_results = []
@@ -113,8 +171,6 @@ class BenchmarkRunner:
         payload = N * chunk_size
 
         print(f"\n{'='*70}\n[BENCHMARK CPU] Impl: {impl.upper()} | Threads: {threads} (Cores: {cores}) | C: {chunk_size} B | N: {N}\n{'='*70}")
-
-        idle_j, idle_power = measure_cpu_idle_power(10.0) if self.rapl_available else (None, None)
 
         cmd = [
             "./cpu/sha256_cpu_bench",
@@ -129,22 +185,30 @@ class BenchmarkRunner:
             "--runs", str(self.runs)
         ]
 
+        cores_list = [int(x) for x in cores.split(",") if x.isdigit()]
+        freq_sampler = FreqSampler(cores_list)
+        freq_sampler.start()
+
+        t_start = time.time()
         e_before = read_rapl_uj() if self.rapl_available else None
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = proc.communicate()
         e_after = read_rapl_uj() if self.rapl_available else None
+        t_end = time.time()
+
+        avg_freq = freq_sampler.stop()
 
         if proc.returncode != 0:
             print(f"Error running CPU benchmark:\n{stderr}", file=sys.stderr)
             return {}
 
+        total_wall_s = t_end - t_start
         rapl_delta_j = compute_rapl_delta_joules(e_before, e_after, self.max_rapl_uj) if self.rapl_available else None
 
         tputs = []
         hashes_list = []
         blocks_list = []
         iters_list = []
-        run_data = []
 
         for line in stdout.splitlines():
             if line.startswith("RUN "):
@@ -157,7 +221,6 @@ class BenchmarkRunner:
                 hashes_list.append(hashes)
                 blocks_list.append(blocks)
                 iters_list.append(iters)
-                run_data.append(p)
                 print(f"  {line}")
 
         if not tputs:
@@ -169,15 +232,15 @@ class BenchmarkRunner:
         avg_blocks = statistics.mean(blocks_list)
         total_iters = sum(iters_list)
 
+        # Energy calculations
         j_gb_gross = (rapl_delta_j / (total_iters * (payload / 1e9))) if (rapl_delta_j and total_iters > 0) else None
         j_gb_net = None
-        if j_gb_gross is not None and idle_power is not None:
-            total_elapsed = self.duration_s * self.runs
-            net_j = max(0.0, rapl_delta_j - (idle_power * total_elapsed))
+        if j_gb_gross is not None and self.cpu_idle_power is not None:
+            active_elapsed = self.duration_s * self.runs
+            net_j = max(0.0, rapl_delta_j - (self.cpu_idle_power * active_elapsed))
             j_gb_net = net_j / (total_iters * (payload / 1e9))
 
-        cores_list = [int(x) for x in cores.split(",") if x.isdigit()]
-        avg_freq = read_cpu_freqs(cores_list)
+        avg_power_w = (rapl_delta_j / total_wall_s) if (rapl_delta_j and total_wall_s > 0) else None
 
         res = {
             "plataforma": "CPU",
@@ -196,9 +259,9 @@ class BenchmarkRunner:
             "J_GB_dispositivo": j_gb_gross if j_gb_gross is not None else "N/A",
             "J_GB_neto": j_gb_net if j_gb_net is not None else "N/A",
             "J_GB_con_host": j_gb_gross if j_gb_gross is not None else "N/A",
-            "potencia_media_W": (rapl_delta_j / (self.duration_s * self.runs)) if rapl_delta_j else "N/A",
+            "potencia_media_W": avg_power_w if avg_power_w is not None else "N/A",
             "frecuencia_MHz": avg_freq,
-            "iteraciones": total_iters
+            "iteraciones": total_iters / len(iters_list) if iters_list else self.runs
         }
         return res
 
@@ -221,16 +284,25 @@ class BenchmarkRunner:
         if version == "v2":
             cmd += ["--batch-size", str(batch_size)]
 
+        t_start = time.time()
         e_before = read_rapl_uj() if self.rapl_available else None
+        pmon = monitor_gpu_power_start()
+
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = proc.communicate()
+
+        p_readings = monitor_gpu_power_stop(pmon)
         e_after = read_rapl_uj() if self.rapl_available else None
+        t_end = time.time()
+        total_wall_s = t_end - t_start
 
         if proc.returncode != 0:
             print(f"Error running GPU benchmark:\n{stderr}", file=sys.stderr)
             return []
 
         host_rapl_j = compute_rapl_delta_joules(e_before, e_after, self.max_rapl_uj) if self.rapl_available else None
+        avg_gpu_power = statistics.mean(p_readings) if p_readings else None
+        gpu_energy_j = (avg_gpu_power * total_wall_s) if avg_gpu_power else None
 
         tput_k_list = []
         tput_e_list = []
@@ -257,6 +329,12 @@ class BenchmarkRunner:
         sd_tk = statistics.stdev(tput_k_list) if len(tput_k_list) > 1 else 0.0
         avg_te = statistics.mean(tput_e_list)
         sd_te = statistics.stdev(tput_e_list) if len(tput_e_list) > 1 else 0.0
+        avg_hashes = statistics.mean(hashes_list)
+        avg_blocks = statistics.mean(blocks_list)
+
+        total_payload_gb = self.runs * (payload / 1e9)
+        j_gb_dev = (gpu_energy_j / total_payload_gb) if (gpu_energy_j and total_payload_gb > 0) else "N/A"
+        j_gb_con_host = ((gpu_energy_j + host_rapl_j) / total_payload_gb) if (gpu_energy_j and host_rapl_j and total_payload_gb > 0) else "N/A"
 
         res_k = {
             "plataforma": "GPU",
@@ -270,12 +348,12 @@ class BenchmarkRunner:
             "nivel": "kernel-only",
             "throughput_mean_GBs": avg_tk,
             "throughput_sd_GBs": sd_tk,
-            "hashes_s": avg_hashes if (avg_hashes := statistics.mean(hashes_list)) else 0.0,
-            "blocks_s": avg_blocks if (avg_blocks := statistics.mean(blocks_list)) else 0.0,
-            "J_GB_dispositivo": "N/A (NVML driver mismatch)",
+            "hashes_s": avg_hashes,
+            "blocks_s": avg_blocks,
+            "J_GB_dispositivo": j_gb_dev,
             "J_GB_neto": "N/A",
-            "J_GB_con_host": (host_rapl_j / (self.runs * (payload / 1e9))) if host_rapl_j else "N/A",
-            "potencia_media_W": "N/A (NVML driver mismatch)",
+            "J_GB_con_host": j_gb_con_host,
+            "potencia_media_W": avg_gpu_power if avg_gpu_power is not None else "N/A",
             "frecuencia_MHz": "N/A",
             "iteraciones": self.runs
         }
@@ -294,10 +372,10 @@ class BenchmarkRunner:
             "throughput_sd_GBs": sd_te,
             "hashes_s": avg_hashes,
             "blocks_s": avg_blocks,
-            "J_GB_dispositivo": "N/A (NVML driver mismatch)",
+            "J_GB_dispositivo": j_gb_dev,
             "J_GB_neto": "N/A",
-            "J_GB_con_host": (host_rapl_j / (self.runs * (payload / 1e9))) if host_rapl_j else "N/A",
-            "potencia_media_W": "N/A (NVML driver mismatch)",
+            "J_GB_con_host": j_gb_con_host,
+            "potencia_media_W": avg_gpu_power if avg_gpu_power is not None else "N/A",
             "frecuencia_MHz": "N/A",
             "iteraciones": self.runs
         }
@@ -325,8 +403,6 @@ def main():
 
     # 1. CPU Benchmarks
     if not args.gpu_only:
-        # Configurations:
-        # Escalar 1T, SHA-NI 1T, 2T, 4T, 8T E-cores (4-11), 12T (0-11)
         cpu_configs = [
             ("scalar", 1, "4"),
             ("shani", 1, "4"),
@@ -363,7 +439,6 @@ def main():
                 results.extend(res_list)
 
     # Compute speedups
-    # Anchor 1: SHA-NI 4T E2E at C=64
     ref_shani_4t = None
     ref_scalar_1t = None
     for r in results:

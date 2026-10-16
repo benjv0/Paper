@@ -1,43 +1,110 @@
-% Auto-generated LaTeX tables from benchmark results
-
-% ── CPU Results Table ─────────────────────────────
+% Auto-generated combined LaTeX tables
 \begin{table}[htbp]
-  \caption{SHA-256 CPU Benchmark Results (Intel Core i7-1255U, 1~GB payload, $C=64$~B)}
-  \label{tab:cpu}
+  \caption{Resultados de CPU SHA-256 (i7-1255U, E-cores, $C=64$~B, $N=16\,777\,216$, $B=2$)}
+  \label{tab:cpu_results}
   \centering
-  \begin{tabular}{lcccc}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
     \toprule
-    \textbf{Configuración} & \textbf{Throughput (GB/s)} & \textbf{Speedup vs 4T} & \textbf{Speedup vs 1T} & \textbf{Energía (J/GB)} \\
+    \textbf{Config.} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB} & \textbf{Speedup$^a$} & \textbf{Speedup$^b$} \\
     \midrule
-    SCALAR_1T        & 0.07 $\pm$ 0.00        & 0.04x        & 1.00x        & \TODO{} \\
-    SHANI_1T         & 0.54 $\pm$ 0.02        & 0.32x        & 8.04x        & \TODO{} \\
-    SHANI_2T         & 0.94 $\pm$ 0.02        & 0.55x        & 13.97x       & \TODO{} \\
-    SHANI_4T         & 1.70 $\pm$ 0.01        & 1.00x        & 25.23x       & \TODO{} \\
-    SHANI_8T         & 3.38 $\pm$ 0.03        & 1.99x        & 50.14x       & \TODO{} \\
-    SHANI_12T        & 4.47 $\pm$ 0.02        & 2.62x        & 66.23x       & \TODO{} \\
+    Escalar 1T     & 0.07 $\pm$ 0.00        &   1.05 &  \TODO{} & 0.04$\times$ & 1.00$\times$ \\
+    \midrule
+    SHA-NI 1T      & 0.54 $\pm$ 0.02        &   8.47 &  \TODO{} & 0.32$\times$ & 8.04$\times$ \\
+    SHA-NI 2T      & 0.94 $\pm$ 0.02        &  14.73 &  \TODO{} & 0.55$\times$ & 13.97$\times$ \\
+    SHA-NI 4T      & 1.70 $\pm$ 0.01        &  26.60 &  \TODO{} & 1.00$\times$ & 25.23$\times$ \\
+    SHA-NI 8T      & 3.38 $\pm$ 0.03        &  52.85 &  \TODO{} & 1.99$\times$ & 50.14$\times$ \\
+    SHA-NI 12T     & 4.47 $\pm$ 0.02        &  69.81 &  \TODO{} & 2.62$\times$ & 66.23$\times$ \\
     \bottomrule
-  \end{tabular}
+    \multicolumn{6}{l}{\footnotesize $^a$Referencia principal: SHA-NI 4T E2E. $^b$Referencia secundaria: Escalar 1T.} \\
+  \end{tabular}%
+  }
 \end{table}
 
-% ── GPU Ablation Table (v1 -> v2) ─────────────────
 \begin{table}[htbp]
-  \caption{Ablación Microarquitectónica de GPU: Kernel Base (v1) vs Alta Utilización (v2)}
+  \caption{Barrido de tamaño de fragmento $C$ en CPU SHA-NI 4T}
+  \label{tab:cpu_sweep}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
+    \toprule
+    \textbf{$C$} & \textbf{$N$} & \textbf{$B$} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB} \\
+    \midrule
+    64~B     &   16\,777\,216 &   2 & 1.70 $\pm$ 0.01        &  26.60 &  \TODO{} \\
+    1~KB     &    1\,048\,576 &  17 & 3.94 $\pm$ 0.01        &   3.84 &  \TODO{} \\
+    4~KB     &       262\,144 &  65 & 4.21 $\pm$ 0.01        &   1.03 &  \TODO{} \\
+    64~KB    &        16\,384 & 1025 & 4.32 $\pm$ 0.01        &   0.07 &  \TODO{} \\
+    1~MB     &         1\,024 & 16385 & 4.33 $\pm$ 0.00        &   0.00 &  \TODO{} \\
+    \bottomrule
+  \end{tabular}%
+  }
+\end{table}
+
+\begin{table}[htbp]
+  \caption{Ablación GPU: kernel v1 (base) vs.~v2 (alta utilización), staging pinned}
   \label{tab:gpu_ablation}
   \centering
+  \resizebox{\columnwidth}{!}{%
   \begin{tabular}{llcccc}
     \toprule
-    \textbf{Versión} & \textbf{Chunk ($C$)} & \textbf{Staging} & \textbf{Kernel (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Speedup vs 4T} \\
+    \textbf{$C$} & \textbf{Kernel} & \textbf{Kernel-only (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Speedup$^a$} & \textbf{Mejora v1$\to$v2} \\
     \midrule
-    GPU_V1   & 64 B     & Pinned & 4.12     & 1.96     & 1.15x \\
-    GPU_V2   & 64 B     & Pinned & 12.89    & 4.55     & 2.67x \\
-    GPU_V1   & 1 KB     & Pinned & 5.55     & 2.80     & 1.64x \\
-    GPU_V2   & 1 KB     & Pinned & 16.04    & 5.48     & 3.22x \\
-    GPU_V1   & 4 KB     & Pinned & 3.80     & 2.29     & 1.35x \\
-    GPU_V2   & 4 KB     & Pinned & 11.37    & 5.55     & 3.26x \\
-    GPU_V1   & 64 KB    & Pinned & 3.08     & 2.02     & 1.18x \\
-    GPU_V2   & 64 KB    & Pinned & 17.57    & 5.02     & 2.95x \\
-    GPU_V1   & 1 MB     & Pinned & 3.30     & 2.11     & 1.24x \\
-    GPU_V2   & 1 MB     & Pinned & 3.38     & 2.43     & 1.43x \\
+    64~B     & v1         &     4.12 &     1.96 & 1.15$\times$ &      --- \\
+    64~B     & \textbf{v2} &    12.89 &     4.55 & 2.67$\times$ & 3.1$\times$ \\
+    \midrule
+    1~KB     & v1         &     5.55 &     2.80 & 1.64$\times$ &      --- \\
+    1~KB     & \textbf{v2} &    16.04 &     5.48 & 3.22$\times$ & 2.9$\times$ \\
+    \midrule
+    4~KB     & v1         &     3.80 &     2.29 & 1.35$\times$ &      --- \\
+    4~KB     & \textbf{v2} &    11.37 &     5.55 & 3.26$\times$ & 3.0$\times$ \\
+    \midrule
+    64~KB    & v1         &     3.08 &     2.02 & 1.18$\times$ &      --- \\
+    64~KB    & \textbf{v2} &    17.57 &     5.02 & 2.95$\times$ & 5.7$\times$ \\
+    \midrule
+    1~MB     & v1         &     3.30 &     2.11 & 1.24$\times$ &      --- \\
+    1~MB     & \textbf{v2} &     3.38 &     2.43 & 1.43$\times$ & 1.0$\times$ \\
     \bottomrule
-  \end{tabular}
+    \multicolumn{6}{l}{\footnotesize $^a$Speedup E2E vs.~CPU SHA-NI 4T ($C=64$~B).} \\
+  \end{tabular}%
+  }
+\end{table}
+
+\begin{table}[htbp]
+  \caption{Impacto del staging en GPU v2 ($C=64$~B)}
+  \label{tab:gpu_staging}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Staging} & \textbf{Kernel-only (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Ratio K/E2E} & \textbf{Speedup$^a$} \\
+    \midrule
+    Pinned     & 12.89 $\pm$ 0.05 & 4.55 $\pm$ 0.09 & 2.83$\times$ & 2.67$\times$ \\
+    Pageable   & 13.28 $\pm$ 0.19 & 3.37 $\pm$ 0.00 & 3.95$\times$ & 1.98$\times$ \\
+    \bottomrule
+    \multicolumn{5}{l}{\footnotesize $^a$Speedup E2E vs.~CPU SHA-NI 4T ($C=64$~B).} \\
+  \end{tabular}%
+  }
+\end{table}
+
+\begin{table}[htbp]
+  \caption{Comparación cruzada de rendimiento y eficiencia energética}
+  \label{tab:comparison}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
+    \toprule
+    \textbf{Plataforma / Config.} & \textbf{$C$} & \textbf{Throughput (GB/s)} & \textbf{J/GB} & \textbf{Speedup$^a$} \\
+    \midrule
+    Escalar 1T             & 64~B     &     0.07 &  \TODO{} & 0.04$\times$ \\
+    SHA-NI 4T (ref.)       & 64~B     &     1.70 &  \TODO{} & 1.00$\times$ \\
+    SHA-NI 8T              & 64~B     &     3.38 &  \TODO{} & 1.99$\times$ \\
+    SHA-NI 12T             & 64~B     &     4.47 &  \TODO{} & 2.62$\times$ \\
+    GPU v2 kernel          & 64~B     &    12.89 &  \TODO{} & 7.57$\times$ \\
+    GPU v2 E2E pinned      & 64~B     &     4.55 &  \TODO{} & 2.67$\times$ \\
+    \midrule
+    FPGA (Spartan-7) & --- & \TODO{} & \TODO{} & \TODO{} \\
+    \bottomrule
+    \multicolumn{5}{l}{\footnotesize $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B, throughput 1.70~GB/s).} \\
+  \end{tabular}%
+  }
 \end{table}

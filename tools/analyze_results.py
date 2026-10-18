@@ -127,18 +127,21 @@ def plot_throughput_vs_c(df: pd.DataFrame, out_path: str = "Paper/throughput_vs_
     ax.bar(x + 0.5*width, v2_k, width, label="GPU v2 Kernel", color="#a1d99b", edgecolor="black")
     ax.bar(x + 1.5*width, v2_e, width, label="GPU v2 E2E", color="#31a354", edgecolor="black")
 
-    # Reference line for SHA-NI 4T
-    cpu_4t = df[(df["plataforma"] == "CPU") & (df["variante"] == "SHANI_4T") & (df["C"] == 64)]
-    if not cpu_4t.empty:
-        val_4t = cpu_4t.iloc[0]["throughput_mean_GBs"]
-        ax.axhline(val_4t, color="#de2d26", linestyle="--", linewidth=1.2, label=f"CPU SHA-NI 4T ({val_4t:.2f} GB/s)")
+    # CPU SHA-NI 4T series per C
+    cpu_4t_vals = []
+    for c in c_vals:
+        s_cpu = df[(df["plataforma"] == "CPU") & (df["variante"] == "SHANI_4T") & (df["C"] == c)]
+        cpu_4t_vals.append(s_cpu.iloc[0]["throughput_mean_GBs"] if not s_cpu.empty else 0)
+
+    ax.plot(x, cpu_4t_vals, marker='o', markersize=5, linestyle='--', color="#de2d26", linewidth=1.6, label="CPU SHA-NI 4T", zorder=4)
 
     ax.set_xlabel("Tamaño de Fragmento $C$")
     ax.set_ylabel("Throughput Útil (GB/s)")
     ax.set_title("Throughput de SHA-256 vs Tamaño de Fragmento $C$")
     ax.set_xticks(x)
     ax.set_xticklabels(x_labels)
-    ax.legend(frameon=True, facecolor="white", edgecolor="none")
+    ax.set_ylim(0, 26)
+    ax.legend(loc="upper left", frameon=True, facecolor="white", edgecolor="none")
     ax.grid(True, linestyle=":", alpha=0.6, axis="y")
 
     plt.tight_layout()

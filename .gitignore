@@ -6,8 +6,11 @@ cpu/sha256_sw
 cpu/sha256_hw
 cpu/sha256_mt_sw
 cpu/sha256_mt_hw
+cpu/sha256_cpu_bench
 gpu/sha256_gpu
+gpu/sha256_gpu_v2
 gpu/results/
+scratch/
 
 # ── OS / editor artifacts ─────────────────────────────────────────────
 .DS_Store

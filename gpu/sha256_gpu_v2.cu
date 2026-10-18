@@ -24,7 +24,14 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <cuda_runtime.h>
+
+static inline double get_wall_time_sec(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+}
 
 #include "../common/workload.h"
 #include "../common/nist_vectors.h"
@@ -203,6 +210,9 @@ int main(int argc, char *argv[])
     const char *filepath = "dummy_1GB.bin";
     size_t chunk_sz = 64;
     int runs = 5;
+    double duration_sec = 0.0;
+    double warmup_sec = 0.0;
+    enum RunMode { RUN_BOTH = 0, RUN_KERNEL = 1, RUN_E2E = 2 } run_mode = RUN_BOTH;
     OutputMode out_mode = OUTPUT_MODE_FULL;
     StagingMode stg_mode = STAGING_PINNED;
     size_t batch_size_bytes = 64 * 1024 * 1024; /* 64 MiB default */
@@ -225,6 +235,15 @@ int main(int argc, char *argv[])
             i++;
         } else if (strcmp(argv[i], "--runs") == 0 && i + 1 < argc) {
             runs = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--duration") == 0 && i + 1 < argc) {
+            duration_sec = atof(argv[++i]);
+        } else if (strcmp(argv[i], "--warmup") == 0 && i + 1 < argc) {
+            warmup_sec = atof(argv[++i]);
+        } else if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
+            if (strcmp(argv[i+1], "kernel") == 0) run_mode = RUN_KERNEL;
+            else if (strcmp(argv[i+1], "e2e") == 0) run_mode = RUN_E2E;
+            else run_mode = RUN_BOTH;
+            i++;
         } else if (strcmp(argv[i], "--save-digests") == 0 && i + 1 < argc) {
             save_digests_path = argv[++i];
         } else if (argv[i][0] != '-' && i == 1) {
@@ -309,117 +328,232 @@ int main(int argc, char *argv[])
     if (chunks_per_batch < 1) chunks_per_batch = 1;
     size_t total_batches = (num_chunks + chunks_per_batch - 1) / chunks_per_batch;
 
-    for (int r = 0; r < runs; ++r) {
-        /* ── Measure kernel-only time ── */
-        CUDA_CHECK(cudaMemcpy(d_in, h_in, used_bytes, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaDeviceSynchronize());
+    if (duration_sec > 0.0) {
+        if (run_mode == RUN_KERNEL) {
+            CUDA_CHECK(cudaMemcpy(d_in, h_in, used_bytes, cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaDeviceSynchronize());
+            if (warmup_sec > 0.0) {
+                fprintf(stderr, "[GPU v2] Warming up kernel for %.1f s...\n", warmup_sec);
+                double tw0 = get_wall_time_sec();
+                while ((get_wall_time_sec() - tw0) < warmup_sec) {
+                    sha256_kernel_v2<<<grid_size, THREADS_PER_BLOCK>>>(
+                        d_in, d_out, chunk_sz, blocks_per_chunk, num_chunks);
+                    CUDA_CHECK(cudaDeviceSynchronize());
+                }
+            }
+            for (int r = 0; r < runs; ++r) {
+                printf("START_RUN %d\n", r + 1);
+                fflush(stdout);
+                CUDA_CHECK(cudaDeviceSynchronize());
+                double t0 = get_wall_time_sec();
+                int iters = 0;
+                while ((get_wall_time_sec() - t0) < duration_sec) {
+                    sha256_kernel_v2<<<grid_size, THREADS_PER_BLOCK>>>(
+                        d_in, d_out, chunk_sz, blocks_per_chunk, num_chunks);
+                    CUDA_CHECK(cudaDeviceSynchronize());
+                    iters++;
+                }
+                double elapsed = get_wall_time_sec() - t0;
+                double tput_kernel_gbs = ((double)iters * (double)used_bytes / elapsed) / 1e9;
+                double hashes_per_sec  = ((double)iters * (double)num_chunks) / elapsed;
+                double blocks_per_sec  = ((double)iters * (double)num_chunks * (double)total_blocks_per_chunk) / elapsed;
+                printf("RUN %d TIME_KERNEL_S %.6f ITERATIONS %d THROUGHPUT_KERNEL_GBS %.6f HASHES_PER_SEC %.2f BLOCKS_PER_SEC %.2f\n",
+                       r + 1, elapsed, iters, tput_kernel_gbs, hashes_per_sec, blocks_per_sec);
+                fflush(stdout);
+            }
+        } else if (run_mode == RUN_E2E) {
+            uint8_t *src_h2d_base = (stg_mode == STAGING_PAGEABLE) ? h_pinned_stage : h_in;
+            if (warmup_sec > 0.0) {
+                fprintf(stderr, "[GPU v2] Warming up E2E for %.1f s...\n", warmup_sec);
+                double tw0 = get_wall_time_sec();
+                while ((get_wall_time_sec() - tw0) < warmup_sec) {
+                    if (stg_mode == STAGING_PAGEABLE) {
+                        memcpy(h_pinned_stage, h_in, used_bytes);
+                    }
+                    for (size_t b = 0; b < total_batches; ++b) {
+                        int s = (int)(b % N_STREAMS);
+                        size_t start_c = b * chunks_per_batch;
+                        size_t end_c   = start_c + chunks_per_batch;
+                        if (end_c > num_chunks) end_c = num_chunks;
+                        size_t n_c = end_c - start_c;
+                        size_t byte_off = start_c * chunk_sz;
+                        size_t byte_len = n_c    * chunk_sz;
+                        size_t hash_off = start_c * 32L;
+                        size_t hash_len = n_c    * 32L;
 
-        cudaEvent_t k_start, k_stop;
-        CUDA_CHECK(cudaEventCreate(&k_start));
-        CUDA_CHECK(cudaEventCreate(&k_stop));
-        CUDA_CHECK(cudaEventRecord(k_start, 0));
+                        CUDA_CHECK(cudaMemcpyAsync(d_in + byte_off, src_h2d_base + byte_off,
+                                                   byte_len, cudaMemcpyHostToDevice, streams[s]));
+                        int seg_blocks = (int)((n_c + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
+                        if (seg_blocks < prop.multiProcessorCount * 5)
+                            seg_blocks = prop.multiProcessorCount * 5;
+                        sha256_kernel_v2<<<seg_blocks, THREADS_PER_BLOCK, 0, streams[s]>>>(
+                            d_in + byte_off, d_out + hash_off, chunk_sz, blocks_per_chunk, n_c);
+                        if (out_mode == OUTPUT_MODE_FULL) {
+                            CUDA_CHECK(cudaMemcpyAsync(h_out + hash_off, d_out + hash_off,
+                                                       hash_len, cudaMemcpyDeviceToHost, streams[s]));
+                        }
+                    }
+                    CUDA_CHECK(cudaDeviceSynchronize());
+                }
+            }
+            for (int r = 0; r < runs; ++r) {
+                printf("START_RUN %d\n", r + 1);
+                fflush(stdout);
+                CUDA_CHECK(cudaDeviceSynchronize());
+                double t0 = get_wall_time_sec();
+                int iters = 0;
+                while ((get_wall_time_sec() - t0) < duration_sec) {
+                    if (stg_mode == STAGING_PAGEABLE) {
+                        memcpy(h_pinned_stage, h_in, used_bytes);
+                    }
+                    for (size_t b = 0; b < total_batches; ++b) {
+                        int s = (int)(b % N_STREAMS);
+                        size_t start_c = b * chunks_per_batch;
+                        size_t end_c   = start_c + chunks_per_batch;
+                        if (end_c > num_chunks) end_c = num_chunks;
+                        size_t n_c = end_c - start_c;
+                        size_t byte_off = start_c * chunk_sz;
+                        size_t byte_len = n_c    * chunk_sz;
+                        size_t hash_off = start_c * 32L;
+                        size_t hash_len = n_c    * 32L;
 
-        sha256_kernel_v2<<<grid_size, THREADS_PER_BLOCK>>>(
-            d_in, d_out, chunk_sz, blocks_per_chunk, num_chunks);
-
-        CUDA_CHECK(cudaEventRecord(k_stop, 0));
-        CUDA_CHECK(cudaEventSynchronize(k_stop));
-        float ms_kernel;
-        CUDA_CHECK(cudaEventElapsedTime(&ms_kernel, k_start, k_stop));
-        double time_kernel_s = ms_kernel / 1000.0;
-        CUDA_CHECK(cudaEventDestroy(k_start));
-        CUDA_CHECK(cudaEventDestroy(k_stop));
-
-        /* ── Measure E2E time with pipelined streams ── */
-        CUDA_CHECK(cudaDeviceSynchronize());
-
-        cudaEvent_t e_start, e_stop;
-        CUDA_CHECK(cudaEventCreate(&e_start));
-        CUDA_CHECK(cudaEventCreate(&e_stop));
-        CUDA_CHECK(cudaEventRecord(e_start, 0));
-
-        uint8_t *src_h2d_base = h_in;
-        if (stg_mode == STAGING_PAGEABLE) {
-            /* Pageable -> pinned copy */
-            memcpy(h_pinned_stage, h_in, used_bytes);
-            src_h2d_base = h_pinned_stage;
-        }
-
-        if (out_mode == OUTPUT_MODE_REDUCE) {
-            CUDA_CHECK(cudaMemset(d_reduced, 0, 32));
-        }
-
-        for (size_t b = 0; b < total_batches; ++b) {
-            int s = (int)(b % N_STREAMS);
-            size_t start_c = b * chunks_per_batch;
-            size_t end_c   = start_c + chunks_per_batch;
-            if (end_c > num_chunks) end_c = num_chunks;
-            size_t n_c = end_c - start_c;
-
-            size_t byte_off = start_c * chunk_sz;
-            size_t byte_len = n_c    * chunk_sz;
-            size_t hash_off = start_c * 32L;
-            size_t hash_len = n_c    * 32L;
-
-            /* Async H2D */
-            CUDA_CHECK(cudaMemcpyAsync(d_in + byte_off, src_h2d_base + byte_off,
-                                       byte_len, cudaMemcpyHostToDevice, streams[s]));
-
-            /* Kernel execution */
-            int seg_blocks = (int)((n_c + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
-            if (seg_blocks < prop.multiProcessorCount * 5)
-                seg_blocks = prop.multiProcessorCount * 5;
-
-            sha256_kernel_v2<<<seg_blocks, THREADS_PER_BLOCK, 0, streams[s]>>>(
-                d_in + byte_off, d_out + hash_off, chunk_sz, blocks_per_chunk, n_c);
-
-            /* D2H in full mode */
-            if (out_mode == OUTPUT_MODE_FULL) {
-                CUDA_CHECK(cudaMemcpyAsync(h_out + hash_off, d_out + hash_off,
-                                           hash_len, cudaMemcpyDeviceToHost, streams[s]));
+                        CUDA_CHECK(cudaMemcpyAsync(d_in + byte_off, src_h2d_base + byte_off,
+                                                   byte_len, cudaMemcpyHostToDevice, streams[s]));
+                        int seg_blocks = (int)((n_c + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
+                        if (seg_blocks < prop.multiProcessorCount * 5)
+                            seg_blocks = prop.multiProcessorCount * 5;
+                        sha256_kernel_v2<<<seg_blocks, THREADS_PER_BLOCK, 0, streams[s]>>>(
+                            d_in + byte_off, d_out + hash_off, chunk_sz, blocks_per_chunk, n_c);
+                        if (out_mode == OUTPUT_MODE_FULL) {
+                            CUDA_CHECK(cudaMemcpyAsync(h_out + hash_off, d_out + hash_off,
+                                                       hash_len, cudaMemcpyDeviceToHost, streams[s]));
+                        }
+                    }
+                    CUDA_CHECK(cudaDeviceSynchronize());
+                    iters++;
+                }
+                double elapsed = get_wall_time_sec() - t0;
+                double tput_e2e_gbs    = ((double)iters * (double)used_bytes / elapsed) / 1e9;
+                double hashes_per_sec  = ((double)iters * (double)num_chunks) / elapsed;
+                double blocks_per_sec  = ((double)iters * (double)num_chunks * (double)total_blocks_per_chunk) / elapsed;
+                printf("RUN %d TIME_E2E_S %.6f ITERATIONS %d THROUGHPUT_E2E_GBS %.6f HASHES_PER_SEC %.2f BLOCKS_PER_SEC %.2f\n",
+                       r + 1, elapsed, iters, tput_e2e_gbs, hashes_per_sec, blocks_per_sec);
+                fflush(stdout);
             }
         }
-
-        uint8_t h_reduced[32];
-        if (out_mode == OUTPUT_MODE_REDUCE) {
-            /* Reduce on device across all digests */
+    } else {
+        for (int r = 0; r < runs; ++r) {
+            /* ── Measure kernel-only time ── */
+            CUDA_CHECK(cudaMemcpy(d_in, h_in, used_bytes, cudaMemcpyHostToDevice));
             CUDA_CHECK(cudaDeviceSynchronize());
-            xor_reduce_kernel_v2<<<64, 256>>>(d_out, d_reduced, num_chunks);
-            CUDA_CHECK(cudaMemcpy(h_reduced, d_reduced, 32, cudaMemcpyDeviceToHost));
+
+            cudaEvent_t k_start, k_stop;
+            CUDA_CHECK(cudaEventCreate(&k_start));
+            CUDA_CHECK(cudaEventCreate(&k_stop));
+            CUDA_CHECK(cudaEventRecord(k_start, 0));
+
+            sha256_kernel_v2<<<grid_size, THREADS_PER_BLOCK>>>(
+                d_in, d_out, chunk_sz, blocks_per_chunk, num_chunks);
+
+            CUDA_CHECK(cudaEventRecord(k_stop, 0));
+            CUDA_CHECK(cudaEventSynchronize(k_stop));
+            float ms_kernel;
+            CUDA_CHECK(cudaEventElapsedTime(&ms_kernel, k_start, k_stop));
+            double time_kernel_s = ms_kernel / 1000.0;
+            CUDA_CHECK(cudaEventDestroy(k_start));
+            CUDA_CHECK(cudaEventDestroy(k_stop));
+
+            /* ── Measure E2E time with pipelined streams ── */
+            CUDA_CHECK(cudaDeviceSynchronize());
+
+            cudaEvent_t e_start, e_stop;
+            CUDA_CHECK(cudaEventCreate(&e_start));
+            CUDA_CHECK(cudaEventCreate(&e_stop));
+            CUDA_CHECK(cudaEventRecord(e_start, 0));
+
+            uint8_t *src_h2d_base = h_in;
+            if (stg_mode == STAGING_PAGEABLE) {
+                /* Pageable -> pinned copy */
+                memcpy(h_pinned_stage, h_in, used_bytes);
+                src_h2d_base = h_pinned_stage;
+            }
+
+            if (out_mode == OUTPUT_MODE_REDUCE) {
+                CUDA_CHECK(cudaMemset(d_reduced, 0, 32));
+            }
+
+            for (size_t b = 0; b < total_batches; ++b) {
+                int s = (int)(b % N_STREAMS);
+                size_t start_c = b * chunks_per_batch;
+                size_t end_c   = start_c + chunks_per_batch;
+                if (end_c > num_chunks) end_c = num_chunks;
+                size_t n_c = end_c - start_c;
+
+                size_t byte_off = start_c * chunk_sz;
+                size_t byte_len = n_c    * chunk_sz;
+                size_t hash_off = start_c * 32L;
+                size_t hash_len = n_c    * 32L;
+
+                /* Async H2D */
+                CUDA_CHECK(cudaMemcpyAsync(d_in + byte_off, src_h2d_base + byte_off,
+                                           byte_len, cudaMemcpyHostToDevice, streams[s]));
+
+                /* Kernel execution */
+                int seg_blocks = (int)((n_c + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
+                if (seg_blocks < prop.multiProcessorCount * 5)
+                    seg_blocks = prop.multiProcessorCount * 5;
+
+                sha256_kernel_v2<<<seg_blocks, THREADS_PER_BLOCK, 0, streams[s]>>>(
+                    d_in + byte_off, d_out + hash_off, chunk_sz, blocks_per_chunk, n_c);
+
+                /* D2H in full mode */
+                if (out_mode == OUTPUT_MODE_FULL) {
+                    CUDA_CHECK(cudaMemcpyAsync(h_out + hash_off, d_out + hash_off,
+                                               hash_len, cudaMemcpyDeviceToHost, streams[s]));
+                }
+            }
+
+            uint8_t h_reduced[32];
+            if (out_mode == OUTPUT_MODE_REDUCE) {
+                /* Reduce on device across all digests */
+                CUDA_CHECK(cudaDeviceSynchronize());
+                xor_reduce_kernel_v2<<<64, 256>>>(d_out, d_reduced, num_chunks);
+                CUDA_CHECK(cudaMemcpy(h_reduced, d_reduced, 32, cudaMemcpyDeviceToHost));
+            }
+
+            CUDA_CHECK(cudaDeviceSynchronize());
+            CUDA_CHECK(cudaEventRecord(e_stop, 0));
+            CUDA_CHECK(cudaEventSynchronize(e_stop));
+            float ms_e2e;
+            CUDA_CHECK(cudaEventElapsedTime(&ms_e2e, e_start, e_stop));
+            double time_e2e_s = ms_e2e / 1000.0;
+            CUDA_CHECK(cudaEventDestroy(e_start));
+            CUDA_CHECK(cudaEventDestroy(e_stop));
+
+            char hex_chunk0[65];
+            if (out_mode == OUTPUT_MODE_FULL) {
+                digest_to_hex(h_out, hex_chunk0);
+            } else {
+                /* Copy chunk 0 for reporting */
+                uint8_t c0[32];
+                CUDA_CHECK(cudaMemcpy(c0, d_out, 32, cudaMemcpyDeviceToHost));
+                digest_to_hex(c0, hex_chunk0);
+            }
+
+            char hex_reduced[65] = "none";
+            if (out_mode == OUTPUT_MODE_REDUCE) {
+                digest_to_hex(h_reduced, hex_reduced);
+            }
+
+            double tput_kernel_gbs = ((double)used_bytes / time_kernel_s) / 1e9;
+            double tput_e2e_gbs    = ((double)used_bytes / time_e2e_s) / 1e9;
+            double hashes_per_sec  = (double)num_chunks / time_e2e_s;
+            double blocks_per_sec  = ((double)num_chunks * (double)total_blocks_per_chunk) / time_e2e_s;
+
+            printf("RUN %d TIME_KERNEL_S %.6f TIME_E2E_S %.6f THROUGHPUT_KERNEL_GBS %.6f THROUGHPUT_E2E_GBS %.6f HASHES_PER_SEC %.2f BLOCKS_PER_SEC %.2f CHUNK_0_HASH %s REDUCED_HASH %s\n",
+                   r + 1, time_kernel_s, time_e2e_s, tput_kernel_gbs, tput_e2e_gbs, hashes_per_sec, blocks_per_sec, hex_chunk0, hex_reduced);
+            fflush(stdout);
         }
-
-        CUDA_CHECK(cudaDeviceSynchronize());
-        CUDA_CHECK(cudaEventRecord(e_stop, 0));
-        CUDA_CHECK(cudaEventSynchronize(e_stop));
-        float ms_e2e;
-        CUDA_CHECK(cudaEventElapsedTime(&ms_e2e, e_start, e_stop));
-        double time_e2e_s = ms_e2e / 1000.0;
-        CUDA_CHECK(cudaEventDestroy(e_start));
-        CUDA_CHECK(cudaEventDestroy(e_stop));
-
-        char hex_chunk0[65];
-        if (out_mode == OUTPUT_MODE_FULL) {
-            digest_to_hex(h_out, hex_chunk0);
-        } else {
-            /* Copy chunk 0 for reporting */
-            uint8_t c0[32];
-            CUDA_CHECK(cudaMemcpy(c0, d_out, 32, cudaMemcpyDeviceToHost));
-            digest_to_hex(c0, hex_chunk0);
-        }
-
-        char hex_reduced[65] = "none";
-        if (out_mode == OUTPUT_MODE_REDUCE) {
-            digest_to_hex(h_reduced, hex_reduced);
-        }
-
-        double tput_kernel_gbs = ((double)used_bytes / time_kernel_s) / 1e9;
-        double tput_e2e_gbs    = ((double)used_bytes / time_e2e_s) / 1e9;
-        double hashes_per_sec  = (double)num_chunks / time_e2e_s;
-        double blocks_per_sec  = ((double)num_chunks * (double)total_blocks_per_chunk) / time_e2e_s;
-
-        printf("RUN %d TIME_KERNEL_S %.6f TIME_E2E_S %.6f THROUGHPUT_KERNEL_GBS %.6f THROUGHPUT_E2E_GBS %.6f HASHES_PER_SEC %.2f BLOCKS_PER_SEC %.2f CHUNK_0_HASH %s REDUCED_HASH %s\n",
-               r + 1, time_kernel_s, time_e2e_s, tput_kernel_gbs, tput_e2e_gbs, hashes_per_sec, blocks_per_sec, hex_chunk0, hex_reduced);
-        fflush(stdout);
     }
 
     if (save_digests_path && out_mode == OUTPUT_MODE_FULL) {

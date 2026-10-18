@@ -64,3 +64,71 @@ python3 tools/run_benchmarks.py --file dummy_1GB.bin --duration 15.0 --warmup 3.
 # 3. PCIe link
 nvidia-smi -q | grep -A5 -i pcie
 ```
+
+---
+
+# Revisión 2 — Auditoría de Correcciones (2026-10-18)
+
+## 1. Resolución de la Inconsistencia de Energía en GPU (T1)
+- **Causa raíz identificada**: El orquestador anterior integraba la potencia sobre una ventana global continua de todo el proceso binario (~2.7 s que incluía inicialización, calentamiento, corrida kernel y corrida E2E en secuencia), dividiendo dicho $\Delta E$ total por una sola carga de 5 GB. Esto provocaba que tanto el modo kernel-only como el modo E2E reportaran erróneamente un valor idéntico e inflado de 9.69 J/GB (lo cual implicaba una potencia aparente de ~48.5 W, superior al TDP de 30 W).
+- **Corrección metodológica**:
+  - Se modificó `gpu/sha256_gpu_v2.cu` para soportar argumentos `--mode {kernel,e2e}`, `--duration` y `--warmup`, desacoplando por completo ambas mediciones.
+  - Se implementó `tools/run_gpu_energy.py` utilizando la API C nativa de NVML (`libnvidia-ml.so.1`) para muestrear la potencia instantánea exclusivamente durante la ventana activa del bucle cronometrado ($\ge 15$ s).
+  - Se midió la potencia en reposo de la GPU sobre 10 s: **6.11 W** (media).
+  - Se re-midió la energía de GPU v2 ($C=64$~B, pinned, 5 corridas $\times 15$ s):
+    - **Kernel-only**: 14.31 $\pm$ 0.14 GB/s, 24.96 W potencia activa, **1.74 $\pm$ 0.02 J/GB bruto**, **1.32 $\pm$ 0.01 J/GB neto**. Comprobación de plausibilidad: $1.74 \times 14.31 = 24.90\text{ W} \le 30\text{ W}$ (PASS).
+    - **E2E pinned**: 4.35 $\pm$ 0.04 GB/s, 19.88 W potencia activa, **4.57 $\pm$ 0.02 J/GB bruto**, **3.17 $\pm$ 0.02 J/GB neto**. Comprobación de plausibilidad: $4.57 \times 4.35 = 19.88\text{ W} \le 30\text{ W}$ (PASS).
+- **Impacto en conclusiones**: La GPU E2E neta (3.17 J/GB) es 37.0% más eficiente que la CPU SHA-NI 4T neta (5.03 J/GB). La CPU SHA-NI 12T (8E sob.) logra 2.87 J/GB netos (+9.5% de ventaja frente a GPU E2E). A nivel kernel puro, la GPU v2 (1.32 J/GB) supera a la CPU 12T por 2.17$\times$.
+
+## 2. Speedup del Barrido de C Normalizado al Mismo C (T2)
+- Anteriormente, la columna Speedup de la Tabla III comparaba todas las filas contra CPU a $C=64$~B (3.54 GB/s), produciendo la falsa ilusión de que la GPU superaba a la CPU en todos los tamaños.
+- Se corrigió comparando cada fila contra CPU SHA-NI 4T al **mismo tamaño de fragmento $C$**:
+  - $C=64$~B: CPU 4T = 3.54 GB/s $\to$ GPU v2 E2E = 5.01 GB/s (**1.42$\times$**).
+  - $C=1$~KB: CPU 4T = 8.21 GB/s $\to$ GPU v2 E2E = 5.82 GB/s (**0.71$\times$**).
+  - $C=4$~KB: CPU 4T = 8.72 GB/s $\to$ GPU v2 E2E = 5.87 GB/s (**0.67$\times$**).
+  - $C=64$~KB: CPU 4T = 8.97 GB/s $\to$ GPU v2 E2E = 5.36 GB/s (**0.60$\times$**).
+  - $C=1$~MB: CPU 4T = 8.99 GB/s $\to$ GPU v2 E2E = 2.45 GB/s (**0.27$\times$**).
+- Conclusión real: La GPU v2 E2E solo supera a la CPU en fragmentos mínimos ($C=64$~B). Para todo $C \ge 1$~KB, la CPU supera holgadamente a la GPU gracias a la ausencia del cuello de botella de transferencia PCIe.
+
+## 3. Desambiguación de Hilos y Núcleos de CPU (T4)
+- La configuración con `taskset -c 4-11` ejecutando 12 hilos corresponde a **12 hilos sobre 8 E-cores en sobresuscripción** (5.94 GB/s, 2.87 J/GB netos).
+- Se implementó y midió una variante sobre las **12 CPUs lógicas completas (núcleos 0--11, 2 P-cores con SMT + 8 E-cores)**:
+  - Throughput: **4.51 $\pm$ 0.02 GB/s** (70.52 Mhash/s, 141.03 Mbloques/s).
+  - El menor rendimiento de 12 CPUs (P+E) frente a 12 hilos sobre 8 E-cores homogéneos (4.51 vs 5.94 GB/s) se debe al desequilibrio microarquitectónico (heterogeneidad de latencias entre Golden Cove y Gracemont, contención de cachés L2/L3 asimétricas y sincronización inter-núcleo).
+
+## 4. Potencia Activa vs Tiempo Total y Límites RAPL (T5)
+- Lectura de sysfs `/sys/class/powercap/intel-rapl:0`:
+  - PL1 (long_term): 15.0 W nominal (techo firmware OEM 200 W, ventana 39.98 s).
+  - PL2 (short_term): 39.0 W (ventana 2.44 ms).
+  - PL4 (peak_power): 60.0 W.
+- Potencia en reposo del host: **3.36 W**.
+- Las potencias del paper anterior (9.09 W, 20.80 W, 20.04 W) provenían de dividir el $\Delta E$ total de RAPL por el tiempo wall-clock de todo el proceso (~78 s) en vez del tiempo activo del bucle (75 s). Las potencias activas reales bajo carga son:
+  - Escalar 1T: 10.14 W.
+  - SHA-NI 4T: 21.72 W ($J/\text{GB}_\text{bruto} \times \text{GB/s} = 6.13 \times 3.54 = 21.7\text{ W}$).
+  - SHA-NI 8T: 21.60 W ($J/\text{GB}_\text{bruto} \times \text{GB/s} = 3.75 \times 5.76 = 21.6\text{ W}$).
+  - SHA-NI 12T (8E sob.): 20.95 W ($J/\text{GB}_\text{bruto} \times \text{GB/s} = 3.53 \times 5.94 = 21.0\text{ W}$).
+- Los valores verifican perfectamente la consistencia $P_\text{activa} = J/\text{GB}_\text{bruto} \times \text{GB/s} \le \text{PL2}$.
+
+## 5. Cuantificación de Sobrecarga por Mensaje vs Relleno (T6)
+- Se evaluó la tasa aritmética de compresión en bloques por segundo ($\text{bloques/s} = N \cdot B / t$) para CPU SHA-NI 4T:
+  - $C=64$~B: 110.7 Mbloques/s.
+  - $C=1$~MB: 140.4 Mbloques/s.
+- Relación: $110.7 / 140.4 = 78.8\%$.
+- Consecuencia: El 50% del trabajo en $C=64$~B es el bloque de relleno adicional ($B=2$), pero además existe una penalización intrínseca de $\approx$21.2% por mensaje debido a la reinicialización de constantes de hash, preparación del padding y almacenamiento de los digests en memoria.
+
+## 6. Análisis del Bus PCIe Full-Duplex (T7)
+- Telemetría NVML confirma enlace **PCIe Gen 4 $\times$4** (7.88 GB/s teórico por sentido, $\approx$6.4 GB/s efectivos).
+- Propiedades CUDA confirman `asyncEngineCount = 2` (dos motores DMA independientes full-duplex).
+- Las transferencias H2D (payload) y D2H (digests) se ejecutan concurrentemente en los streams CUDA; por ende, **los tiempos no se suman secuencialmente**.
+- Tasas direccionales en $C=64$~B:
+  - H2D: 1073.74 MB / 0.214 s = **5.01 GB/s**.
+  - D2H: 536.87 MB / 0.214 s = **2.51 GB/s**.
+- En $C=1$--$4$~KB (donde el volumen de digests es mínimo, $\le 32$~MiB), el throughput E2E alcanza **5.82--5.87 GB/s** ($\approx$91--92% del límite efectivo del enlace), confirmando que el bus opera cerca de su saturación física unidireccional.
+
+## 7. Trazabilidad de Cambios Históricos (T9)
+- **CPU SHA-NI 4T ($C=64$~KB)** pasó de 5.13 GB/s a 8.97 GB/s:
+  - Medición anterior: invocaba OpenSSL EVP (`fread` / lectura de archivo por bloques o despacho en stream).
+  - Medición actual: buffer completo precargado en memoria RAM con bucle interno multihilo que invoca directamente las instrucciones intrínsecas de ensamblador SHA-NI (`_mm_sha256rnds2_epu32`, `_mm_sha256msg1_epu32`, `_mm_sha256msg2_epu32`), eliminando toda sobrecarga de capas de software.
+- **GPU v2 kernel-only ($C=64$~KB)** pasó de 16.81 GB/s a 22.29 GB/s:
+  - Medición actual incorpora compilación con flag `--maxrregcount=48`, elevando la ocupación teórica de 33.3% a 83.3% (5 bloques/SM), combinada con el reemplazo de la ventana de mensajes `w[16]`, instrucción PTX `__byte_perm()` y desenrollado de 64 rondas con pipeline de 3 streams sobre lotes de 64 MiB.
+

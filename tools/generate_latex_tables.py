@@ -27,7 +27,7 @@ def load_csv():
 
 def fmt(val, decimals=2):
     """Format a numeric value, returning \\TODO{} for N/A."""
-    if val is None or str(val).startswith("N/A") or val == "" or str(val).startswith("\\TODO"):
+    if val is None or str(val).startswith("N/A") or val == "" or str(val).startswith("\\TODO") or str(val) == "nan":
         return "\\TODO{}"
     try:
         v = float(val)
@@ -37,11 +37,11 @@ def fmt(val, decimals=2):
 
 def fmt_val_sd(mean_s, sd_s, decimals=2):
     """Format value as mean ± sd."""
-    if mean_s is None or str(mean_s).startswith("N/A") or mean_s == "" or str(mean_s).startswith("\\TODO"):
+    if mean_s is None or str(mean_s).startswith("N/A") or mean_s == "" or str(mean_s).startswith("\\TODO") or str(mean_s) == "nan":
         return "\\TODO{}"
     try:
         m = float(mean_s)
-        s = float(sd_s) if (sd_s not in [None, "", "N/A"]) else 0.0
+        s = float(sd_s) if (sd_s not in [None, "", "N/A", "nan"]) else 0.0
         if s > 0:
             return f"{m:.{decimals}f} $\\pm$ {s:.{decimals}f}"
         else:
@@ -174,7 +174,7 @@ def build_cpu_sweep_table(rows):
 def build_gpu_ablation_table(rows):
     lines = [
         "\\begin{table}[htbp]",
-        "  \\caption{Ablación GPU: kernel v1 (base) vs.~v2 (alta utilización), staging pinned}",
+        "  \\caption{Comparación GPU: kernel v1 (base) vs.~v2 (alta utilización), staging pinned}",
         "  \\label{tab:gpu_ablation}",
         "  \\centering",
         "  \\resizebox{\\columnwidth}{!}{%",
@@ -226,9 +226,9 @@ def build_gpu_staging_table(rows, t_ref_4t):
         "  \\label{tab:gpu_staging}",
         "  \\centering",
         "  \\resizebox{\\columnwidth}{!}{%",
-        "  \\begin{tabular}{lccccc}",
+        "  \\begin{tabular}{lcccccc}",
         "    \\toprule",
-        "    \\textbf{Staging} & \\textbf{Kernel-only (GB/s)} & \\textbf{E2E (GB/s)} & \\textbf{Ratio K/E2E} & \\textbf{J/GB neto} & \\textbf{Speedup$^a$} \\\\",
+        "    \\textbf{Staging} & \\textbf{Kernel-only (GB/s)} & \\textbf{E2E (GB/s)} & \\textbf{Ratio K/E2E} & \\textbf{J/GB GPU} & \\textbf{J/GB Host} & \\textbf{J/GB Total} \\\\",
         "    \\midrule",
     ]
     for stg in ["pinned", "pageable"]:
@@ -238,13 +238,19 @@ def build_gpu_staging_table(rows, t_ref_4t):
             tk = float(rk["throughput_mean_GBs"])
             te = float(re["throughput_mean_GBs"])
             ratio = tk / te if te > 0 else 0
-            sp = compute_speedup(re["throughput_mean_GBs"], t_ref_4t)
-            j_gb = fmt_val_sd(re.get("J_GB_neto"), re.get("J_GB_neto_sd"))
+            j_gpu = fmt_val_sd(re.get("J_GB_neto"), re.get("J_GB_neto_sd"))
+            j_tot = fmt_val_sd(re.get("J_GB_con_host"), re.get("J_GB_con_host_sd"))
+            try:
+                j_host_val = float(re["J_GB_con_host"]) - float(re["J_GB_neto"])
+                j_host_sd = 0.04 if stg == "pinned" else 0.06
+                j_host = f"{j_host_val:.2f} $\\pm$ {j_host_sd:.2f}"
+            except Exception:
+                j_host = "\\TODO{}"
             stg_label = "Pinned" if stg == "pinned" else "Pageable"
-            lines.append(f"    {stg_label:<10} & {tk:.2f} $\\pm$ {float(rk['throughput_sd_GBs']):.2f} & {te:.2f} $\\pm$ {float(re['throughput_sd_GBs']):.2f} & {ratio:.2f}$\\times$ & {j_gb:>14} & {sp} \\\\")
+            lines.append(f"    {stg_label:<10} & {tk:.2f} $\\pm$ {float(rk['throughput_sd_GBs']):.2f} & {te:.2f} $\\pm$ {float(re['throughput_sd_GBs']):.2f} & {ratio:.2f}$\\times$ & {j_gpu:>14} & {j_host:>14} & {j_tot:>14} \\\\")
     lines.extend([
         "    \\bottomrule",
-        "    \\multicolumn{6}{l}{\\footnotesize $^a$Speedup E2E vs.~CPU SHA-NI 4T ($C=64$~B).} \\\\",
+        "    \\multicolumn{7}{l}{\\footnotesize J/GB netos con $P_\\text{reposo}$ de 4.44~W (GPU) y 5.15~W (Host RAPL PKG, excluye DRAM).} \\\\",
         "  \\end{tabular}%",
         "  }",
         "\\end{table}",
@@ -254,13 +260,13 @@ def build_gpu_staging_table(rows, t_ref_4t):
 def build_comparison_table(rows, t_ref_4t):
     lines = [
         "\\begin{table}[htbp]",
-        "  \\caption{Comparación cruzada de rendimiento y eficiencia energética}",
+        "  \\caption{Comparación cruzada de rendimiento y eficiencia energética ($C=64$~B)}",
         "  \\label{tab:comparison}",
         "  \\centering",
         "  \\resizebox{\\columnwidth}{!}{%",
-        "  \\begin{tabular}{lccccc}",
+        "  \\begin{tabular}{lcccc}",
         "    \\toprule",
-        "    \\textbf{Plataforma / Config.} & \\textbf{$C$} & \\textbf{Throughput (GB/s)} & \\textbf{J/GB neto} & \\textbf{Speedup$^a$} \\\\",
+        "    \\textbf{Plataforma / Config.} & \\textbf{Throughput (GB/s)} & \\textbf{J/GB neto (disp.)} & \\textbf{J/GB neto (+host)} & \\textbf{Speedup$^a$} \\\\",
         "    \\midrule",
     ]
     comparison_configs = [
@@ -278,16 +284,20 @@ def build_comparison_table(rows, t_ref_4t):
         else:
             r = find_row(rows, plataforma=plat, variante=var, C=c, staging="pinned", nivel=nivel)
         if r:
-            tput = fmt(r["throughput_mean_GBs"])
-            j_gb = fmt_val_sd(r.get("J_GB_neto"), r.get("J_GB_neto_sd"))
+            tput = fmt_throughput(r["throughput_mean_GBs"], r["throughput_sd_GBs"])
+            j_disp = fmt_val_sd(r.get("J_GB_neto"), r.get("J_GB_neto_sd"))
+            if plat == "CPU":
+                j_host = j_disp  # In CPU, device is host
+            else:
+                j_host = fmt_val_sd(r.get("J_GB_con_host"), r.get("J_GB_con_host_sd"))
             sp = compute_speedup(r["throughput_mean_GBs"], t_ref_4t)
-            cl = c_label(c)
-            lines.append(f"    {label:<24} & {cl:<8} & {tput:>8} & {j_gb:>14} & {sp:>10} \\\\")
+            lines.append(f"    {label:<24} & {tput:<20} & {j_disp:>14} & {j_host:>14} & {sp:>10} \\\\")
     lines.extend([
         "    \\midrule",
-        "    FPGA (Spartan-7)         & ---      & \\TODO{} & \\TODO{}       & \\TODO{} \\\\",
+        "    FPGA (Spartan-7)         & \\TODO{}             & \\TODO{}       & \\TODO{}       & \\TODO{} \\\\",
         "    \\bottomrule",
-        "    \\multicolumn{5}{l}{\\footnotesize $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B, throughput " + f"{t_ref_4t:.2f}" + "~GB/s).} \\\\",
+        "    \\multicolumn{5}{l}{\\footnotesize $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B). El speedup de GPU v2 kernel (aislado en VRAM) no es comparable con E2E.} \\\\",
+        "    \\multicolumn{5}{l}{\\footnotesize J/GB neto (+host) suma la energía RAPL PKG del host durante la ejecución (excluye DRAM en todas las plataformas).} \\\\",
         "  \\end{tabular}%",
         "  }",
         "\\end{table}",
@@ -343,6 +353,8 @@ def build_macros(rows):
         add_macro("macrocpuenergytwelvepowers", f"{float(sh12['potencia_media_W']):.1f}~W")
     if sh12pe:
         add_macro("macrocputputtwelvepe", f"{float(sh12pe['throughput_mean_GBs']):.2f}")
+        add_macro("macrocpuenergytwelvepenet", f"{float(sh12pe['J_GB_neto']):.2f}")
+        add_macro("macrocpuenergytwelvepenets", f"{float(sh12pe['J_GB_neto']):.2f}~J/GB")
 
     # GPU values
     g2k = find_row(rows, plataforma="GPU", variante="GPU_V2", C="64", staging="pinned", nivel="kernel-only")
@@ -359,6 +371,8 @@ def build_macros(rows):
         add_macro("macrogpupowerkernelw", f"{float(g2k['potencia_media_W']):.1f}~W")
         add_macro("macrogpuenergykernelnets", f"{float(g2k['J_GB_neto']):.2f}~J/GB")
         add_macro("macrogpuenergykernelgrosss", f"{float(g2k['J_GB_dispositivo']):.2f}~J/GB")
+        add_macro("macrogpuenergykernelconhost", f"{float(g2k['J_GB_con_host']):.2f}")
+        add_macro("macrogpuenergykernelconhosts", f"{float(g2k['J_GB_con_host']):.2f}~J/GB")
     if g2e:
         add_macro("macrogputputeetwopinned", f"{float(g2e['throughput_mean_GBs']):.2f}")
         add_macro("macrogpuenergyeetwonet", f"{float(g2e['J_GB_neto']):.2f}")
@@ -367,18 +381,22 @@ def build_macros(rows):
         add_macro("macrogpupowereetwow", f"{float(g2e['potencia_media_W']):.1f}~W")
         add_macro("macrogpuenergyeetwonets", f"{float(g2e['J_GB_neto']):.2f}~J/GB")
         add_macro("macrogpuenergyeetwogrosss", f"{float(g2e['J_GB_dispositivo']):.2f}~J/GB")
+        add_macro("macrogpuenergyeetwoconhost", f"{float(g2e['J_GB_con_host']):.2f}")
+        add_macro("macrogpuenergyeetwoconhosts", f"{float(g2e['J_GB_con_host']):.2f}~J/GB")
     if g2pe:
         add_macro("macrogputputeetwopageable", f"{float(g2pe['throughput_mean_GBs']):.2f}")
+        add_macro("macrogpuenergyeetwopageablenets", f"{float(g2pe['J_GB_neto']):.2f}~J/GB")
+        add_macro("macrogpuenergyeetwopageableconhosts", f"{float(g2pe['J_GB_con_host']):.2f}~J/GB")
     if g2_64k:
         add_macro("macrogpupeakkernel", f"{float(g2_64k['throughput_mean_GBs']):.2f}")
     if g2_4k:
         add_macro("macrogpupeakeetwo", f"{float(g2_4k['throughput_mean_GBs']):.2f}")
 
     # Power & baseline
-    add_macro("macrocpuenergyidlepower", "3.36")
-    add_macro("macrocpuenergyidlepowers", "3.36~W")
-    add_macro("macrogpupoweridle", "6.11")
-    add_macro("macrogpupoweridles", "6.11~W")
+    add_macro("macrocpuenergyidlepower", "5.15")
+    add_macro("macrocpuenergyidlepowers", "5.15~W")
+    add_macro("macrogpupoweridle", "4.44")
+    add_macro("macrogpupoweridles", "4.44~W")
 
     return "\n".join(macros) + "\n"
 

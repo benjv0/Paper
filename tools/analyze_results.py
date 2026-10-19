@@ -141,7 +141,7 @@ def plot_throughput_vs_c(df: pd.DataFrame, out_path: str = "Paper/throughput_vs_
     ax.set_xticks(x)
     ax.set_xticklabels(x_labels)
     ax.set_ylim(0, 26)
-    ax.legend(loc="upper left", frameon=True, facecolor="white", edgecolor="none")
+    ax.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="#cccccc", fontsize=8.5)
     ax.grid(True, linestyle=":", alpha=0.6, axis="y")
 
     plt.tight_layout()

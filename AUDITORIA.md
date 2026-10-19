@@ -132,3 +132,77 @@ nvidia-smi -q | grep -A5 -i pcie
 - **GPU v2 kernel-only ($C=64$~KB)** pasó de 16.81 GB/s a 22.29 GB/s:
   - Medición actual incorpora compilación con flag `--maxrregcount=48`, elevando la ocupación teórica de 33.3% a 83.3% (5 bloques/SM), combinada con el reemplazo de la ventana de mensajes `w[16]`, instrucción PTX `__byte_perm()` y desenrollado de 64 rondas con pipeline de 3 streams sobre lotes de 64 MiB.
 
+---
+
+# Revisión 3 — Auditoría de Metodología Unificada, Telemetría y Scheduling (2026-10-18)
+
+## 1. Tarea 1: Resolución de la Inconsistencia Energía vs. Throughput en GPU
+- **Causa raíz identificada**:
+  En la Revisión 2, el archivo `benchmarks_summary.csv` combinaba cifras de throughput obtenidas de ejecuciones cortas basadas en eventos CUDA (17.40 GB/s kernel, 5.01 GB/s E2E) con mediciones de energía integradas en un bucle continuo de $\ge 15$ s donde el reloj sostenido y la temperatura reducían el throughput a 14.31 GB/s (kernel) y 4.35 GB/s (E2E).
+  Al calcular el throughput implícito $P / (J/\text{GB}_\text{bruto})$, se obtenía $24.96 / 1.74 = 14.34$ GB/s para kernel y $19.88 / 4.57 = 4.35$ GB/s para E2E, generando una discrepancia de 13–17% respecto a los 17.40 y 5.01 GB/s reportados.
+- **Corrección metodológica**:
+  - Se desarrolló `tools/run_gpu_energy_unified.py` y `tools/run_gpu_suite.py` midiendo throughput, energía acumulada por hardware (`nvmlDeviceGetTotalEnergyConsumption`), muestreo cruzado a 10 Hz (`nvmlDeviceGetPowerUsage`) y RAPL PKG del host en el **mismo y único bucle cronometrado sostenido ($\ge 15$ s)**.
+  - Se incorporó la validación obligatoria $|P / (J/\text{GB}_\text{bruto}) - \text{Throughput}| < 3\%$, la cual pasó con **0.000% de error** en todas las ejecuciones.
+- **Valores Antiguos vs. Nuevos ($C=64$~B, pinned)**:
+  - **GPU v2 kernel-only**:
+    - Antiguo: Throughput = 17.40 GB/s, Potencia = 24.96 W, J/GB bruto = 1.74, J/GB neto = 1.32.
+    - Nuevo: Throughput = **15.62 $\pm$ 0.15 GB/s**, Potencia = **29.67 W**, J/GB bruto = **1.90 $\pm$ 0.02**, J/GB neto solo GPU = **1.62 $\pm$ 0.02**.
+  - **GPU v2 E2E pinned**:
+    - Antiguo: Throughput = 5.01 GB/s, Potencia = 19.88 W, J/GB bruto = 4.57, J/GB neto = 3.17.
+    - Nuevo: Throughput = **4.98 $\pm$ 0.02 GB/s**, Potencia = **21.85 W**, J/GB bruto = **4.38 $\pm$ 0.04**, J/GB neto solo GPU = **3.49 $\pm$ 0.04**.
+  - **GPU v2 E2E pageable**:
+    - Antiguo: Throughput = 3.93 GB/s, Potencia = N/A, J/GB = N/A.
+    - Nuevo: Throughput = **3.86 $\pm$ 0.02 GB/s**, Potencia = **18.98 W**, J/GB bruto = **4.92 $\pm$ 0.04**, J/GB neto solo GPU = **3.77 $\pm$ 0.03**.
+
+## 2. Tarea 2: Telemetría de Energía del Host y Reversión del Ranking Multiplataforma
+- **Justificación**:
+  El coprocesamiento en GPU demanda trabajo activo del procesador host para reservar y bloquear memoria pinned, orquestar descriptores DMA y sincronizar los streams CUDA. A 4.98 GB/s, el host disipa 15.06 W activos (9.91 W netos sobre reposo), agregando una carga energética sustancial.
+- **Valores Medidos con Host ($C=64$~B)**:
+  - GPU v2 kernel-only: Host neto = 0.83 J/GB $\to$ **GPU+host neto = 2.45 $\pm$ 0.04 J/GB**.
+  - GPU v2 E2E pinned: Host neto = 1.99 J/GB $\to$ **GPU+host neto = 5.48 $\pm$ 0.07 J/GB**.
+  - GPU v2 E2E pageable: Host neto = 2.57 J/GB $\to$ **GPU+host neto = 6.34 $\pm$ 0.09 J/GB**.
+- **Impacto y Reversión del Ranking**:
+  - *Perspectiva de solo dispositivo*: GPU v2 E2E pinned (3.49 J/GB) es 15.5% más eficiente que CPU SHA-NI 4T (4.13 J/GB).
+  - *Perspectiva de sistema completo (con host)*: CPU SHA-NI 4T (4.13 J/GB) es **24.7% más eficiente** que GPU E2E (+host 5.48 J/GB).
+  - *Frente a la mejor CPU (12 CPUs P+E dynamic)*: La CPU (2.53 J/GB netos) es **2.16$\times$ más eficiente energéticamente** (5.48 vs. 2.53 J/GB, -53.8% consumo de energía) y supera a la GPU E2E en throughput útil por un **17.2%** (5.84 vs. 4.98 GB/s).
+
+## 3. Tarea 3: Planificación Dinámica en CPU y Desbloqueo de 12 CPUs (P+E)
+- **Causa raíz de la subestimación de 12 CPUs**:
+  En la Revisión 2, 12 CPUs (P+E) rindió 4.51 GB/s, atribuyéndose erróneamente a "sincronización inter-hilo" y "contención de caché".
+  La telemetría hilo por hilo demostró que el reparto estático uniforme ($N/12$) imponía un desbalance temporal de **146.9 ms** debido a la asimetría microarquitectónica entre Golden Cove (P-cores) y Gracemont (E-cores).
+  Asimismo, la discrepancia entre 8T y 12T (8E sob.) en la Revisión 2 respondió a transitorios térmicos; bajo carga continua de 15 s ambas configuraciones saturan los 8 E-cores a 2.77 GHz disipando 20.1–20.3 W con rendimientos equivalentes (~5.60 vs. 5.62 GB/s).
+- **Implementación**:
+  Se incorporó en `cpu/sha256_cpu_bench.c` una cola de trabajo dinámica con contador atómico (`--sched dynamic`, tareas de 64K mensajes = 4 MiB), reduciendo el desbalance temporal a **6.6 ms**.
+- **Valores Antiguos vs. Nuevos ($C=64$~B)**:
+  - **SHA-NI 4T**:
+    - Antiguo: 3.54 GB/s, 21.72 W, 4.13 J/GB neto.
+    - Nuevo (dynamic): **3.55 $\pm$ 0.00 GB/s**, 19.81 W, **4.13 $\pm$ 0.05 J/GB neto** (E-cores 3500 MHz, imbalance 3.0 ms).
+  - **SHA-NI 8T**:
+    - Antiguo: 5.76 GB/s, 21.60 W, 2.86 J/GB neto.
+    - Nuevo (dynamic): **5.60 $\pm$ 0.02 GB/s**, 20.11 W, **2.67 $\pm$ 0.05 J/GB neto** (E-cores 2770 MHz, imbalance 4.8 ms).
+  - **SHA-NI 12T s/8E (sobresuscripción)**:
+    - Antiguo: 5.94 GB/s, 20.95 W, 2.66 J/GB neto.
+    - Nuevo (dynamic): **5.62 $\pm$ 0.07 GB/s**, 20.28 W, **2.69 $\pm$ 0.09 J/GB neto** (E-cores 2778 MHz, imbalance 7.8 ms).
+  - **SHA-NI 12 CPUs (P+E) — MEJOR CPU**:
+    - Antiguo (estático): 4.51 GB/s, J/GB = \TODO{}.
+    - Nuevo (dinámico): **5.84 $\pm$ 0.02 GB/s** (91.25 Mhash/s), 19.95 W, **2.53 $\pm$ 0.02 J/GB neto** (3.42 J/GB bruto). P-cores a 2838 MHz, E-cores a 2200 MHz, desbalance 6.6 ms.
+
+## 4. Tarea 4: Reconciliación de Potencia en Reposo y Análisis de Límites de Potencia
+- **Potencia en Reposo Reconciliada (3 mediciones $\times$ 30 s)**:
+  - CPU PKG (RAPL MSR/MMIO): **5.154 $\pm$ 0.060 W** (anterior: 3.36 W medidos en 10 s).
+  - GPU (NVML hardware counter): **4.439 $\pm$ 0.286 W** (anterior: 6.11 W; muestreo 10 Hz dio 5.202 W).
+  - Chequeo de consistencia: $(J/\text{GB}_\text{bruto} - J/\text{GB}_\text{neto}) \times \text{Throughput} = P_\text{reposo}$ verificado en todas las filas con error nulo ($\pm 0.00$ W).
+- **Límites de Potencia y Térmica**:
+  - `/sys/class/powercap/intel-rapl:0` (MSR): declara PL1 OEM = 200 W (no operativo).
+  - `/sys/class/powercap/intel-rapl-mmio:0` (MMIO): impone **PL1 = 20.0 W** (Constraint 0, ventana 39.98 s) y PL2 = 39.0 W (ventana 2.44 ms).
+  - Telemetría en tiempo real: temperaturas estables entre 65–72 °C en 8T/12T con `throttle_count = 0`. La estabilización de potencia en $\approx$20 W y el ajuste de frecuencias corresponden a restricción de potencia MMIO (PL1=20 W) y no a estrangulamiento térmico.
+
+## 5. Tarea 5: Correcciones Bibliográficas, Textuales y Gráficas
+- StoreGPU [21]: corregido para aclarar que trata algoritmos MD5 y SHA-1.
+- Crypto-RV [27]: corregido para aclarar comparativa frente a i9-10940X, i7-12700H y Cortex-A53.
+- Zhang y Liu [28]: eliminada atribución no verificada a Zynq-7000.
+- JRC91528 [32]: autor unificado como Gaspar.
+- Pham et al. [29]: contextualizado con precisión frente a nuestro estudio que suma SHA-NI y protocolo energético sincronizado.
+- Unificación formal: opciones `es-tabla` y `es-nodecimaldot` en `babel`, formato de tablas y números estandarizado con punto decimal.
+- Gráficas: leyenda en `throughput_vs_c.pdf` reubicada fuera del área de barras de $C=64$~B; etiquetas de plataformas en `throughput_chart.pdf` rotadas a 15° con alineación derecha para evitar superposición.
+

@@ -103,9 +103,13 @@ def plot_throughput_vs_c(df: pd.DataFrame, out_path: str = "Paper/throughput_vs_
 
     # GPU v2 Kernel-only vs E2E pinned
     v2_k = []
+    v2_k_err = []
     v2_e = []
+    v2_e_err = []
     v1_k = []
+    v1_k_err = []
     v1_e = []
+    v1_e_err = []
 
     for c in c_vals:
         s2k = gpu_df[(gpu_df["variante"] == "GPU_V2") & (gpu_df["C"] == c) & (gpu_df["staging"] == "pinned") & (gpu_df["nivel"] == "kernel-only")]
@@ -114,26 +118,41 @@ def plot_throughput_vs_c(df: pd.DataFrame, out_path: str = "Paper/throughput_vs_
         s1e = gpu_df[(gpu_df["variante"] == "GPU_V1") & (gpu_df["C"] == c) & (gpu_df["staging"] == "pinned") & (gpu_df["nivel"] == "E2E")]
 
         v2_k.append(s2k.iloc[0]["throughput_mean_GBs"] if not s2k.empty else 0)
+        v2_k_err.append(s2k.iloc[0]["throughput_sd_GBs"] if not s2k.empty else 0)
         v2_e.append(s2e.iloc[0]["throughput_mean_GBs"] if not s2e.empty else 0)
+        v2_e_err.append(s2e.iloc[0]["throughput_sd_GBs"] if not s2e.empty else 0)
+
         v1_k.append(s1k.iloc[0]["throughput_mean_GBs"] if not s1k.empty else 0)
+        v1_k_err.append(s1k.iloc[0]["throughput_sd_GBs"] if not s1k.empty else 0)
         v1_e.append(s1e.iloc[0]["throughput_mean_GBs"] if not s1e.empty else 0)
+        v1_e_err.append(s1e.iloc[0]["throughput_sd_GBs"] if not s1e.empty else 0)
 
     fig, ax = plt.subplots(figsize=(6.5, 3.8))
     x = np.arange(len(c_vals))
     width = 0.2
 
-    ax.bar(x - 1.5*width, v1_k, width, label="GPU v1 Kernel", color="#9ecae1", edgecolor="black")
-    ax.bar(x - 0.5*width, v1_e, width, label="GPU v1 E2E", color="#3182bd", edgecolor="black")
-    ax.bar(x + 0.5*width, v2_k, width, label="GPU v2 Kernel", color="#a1d99b", edgecolor="black")
-    ax.bar(x + 1.5*width, v2_e, width, label="GPU v2 E2E", color="#31a354", edgecolor="black")
+    kw_err = {'elinewidth': 0.8, 'ecolor': '#222222', 'capthick': 0.8}
+    ax.bar(x - 1.5*width, v1_k, width, yerr=v1_k_err, capsize=2, error_kw=kw_err, label="GPU v1 Kernel", color="#9ecae1", edgecolor="black")
+    ax.bar(x - 0.5*width, v1_e, width, yerr=v1_e_err, capsize=2, error_kw=kw_err, label="GPU v1 E2E", color="#3182bd", edgecolor="black")
+    ax.bar(x + 0.5*width, v2_k, width, yerr=v2_k_err, capsize=2, error_kw=kw_err, label="GPU v2 Kernel", color="#a1d99b", edgecolor="black")
+    ax.bar(x + 1.5*width, v2_e, width, yerr=v2_e_err, capsize=2, error_kw=kw_err, label="GPU v2 E2E", color="#31a354", edgecolor="black")
 
     # CPU SHA-NI 4T series per C
     cpu_4t_vals = []
+    cpu_4t_err = []
     for c in c_vals:
         s_cpu = df[(df["plataforma"] == "CPU") & (df["variante"] == "SHANI_4T") & (df["C"] == c)]
         cpu_4t_vals.append(s_cpu.iloc[0]["throughput_mean_GBs"] if not s_cpu.empty else 0)
+        cpu_4t_err.append(s_cpu.iloc[0]["throughput_sd_GBs"] if not s_cpu.empty else 0)
 
-    ax.plot(x, cpu_4t_vals, marker='o', markersize=5, linestyle='--', color="#de2d26", linewidth=1.6, label="CPU SHA-NI 4T", zorder=4)
+    ax.errorbar(x, cpu_4t_vals, yerr=cpu_4t_err, marker='o', markersize=5, linestyle='--', color="#de2d26", linewidth=1.6, capsize=3, label="CPU SHA-NI 4T", zorder=4)
+
+    # 12 CPUs (P+E) at C=64 B (only C=64 B exists in repository results)
+    s_pe = df[(df["plataforma"] == "CPU") & (df["variante"] == "SHANI_12T_PE") & (df["C"] == 64)]
+    if not s_pe.empty:
+        pe_val = s_pe.iloc[0]["throughput_mean_GBs"]
+        pe_err = s_pe.iloc[0]["throughput_sd_GBs"]
+        ax.errorbar([x[0]], [pe_val], yerr=[pe_err], marker='^', markersize=7, color="#7a0177", linestyle='None', capsize=3, label="CPU 12 CPUs P+E (64 B)", zorder=5)
 
     ax.set_xlabel("Tamaño de Fragmento $C$")
     ax.set_ylabel("Throughput Útil (GB/s)")
@@ -141,7 +160,7 @@ def plot_throughput_vs_c(df: pd.DataFrame, out_path: str = "Paper/throughput_vs_
     ax.set_xticks(x)
     ax.set_xticklabels(x_labels)
     ax.set_ylim(0, 26)
-    ax.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="#cccccc", fontsize=8.5)
+    ax.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="#cccccc", fontsize=8.2)
     ax.grid(True, linestyle=":", alpha=0.6, axis="y")
 
     plt.tight_layout()

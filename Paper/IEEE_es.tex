@@ -131,7 +131,7 @@ La ejecución en CPU se evaluó en un Intel Core i7-1255U (Alder Lake, 10~nm, 2~
     \item \textbf{Escalar (x86-64):} Instrucciones de propósito general sin aceleración criptográfica.
     \item \textbf{SHA-NI:} Instrucciones nativas Intel SHA Extensions (\texttt{-msha, -msse4.1}), ejecutando las rondas de compresión directamente sobre registros SSE de 128 bits.
 \end{itemize}
-El escalado se evaluó con 1, 4, 8 hilos y 12 CPUs (P+E). Para mitigar el desbalance de cómputo por la asimetría microarquitectónica entre núcleos P y E, se implementó una cola de trabajo compartida basada en un contador atómico libre de cerrojos con tareas de 64K fragmentos (4~MiB por bloque de trabajo).
+El escalado se evaluó con 1, 4, 8 hilos, 12 hilos sobre los 8 E-cores (sobresuscripción) y 12 CPUs (P+E). Para mitigar el desbalance de cómputo por la asimetría microarquitectónica entre núcleos P y E, se implementó una cola de trabajo compartida basada en un contador atómico libre de cerrojos con tareas de 64K fragmentos (4~MiB por bloque de trabajo).
 
 \subsection{Ejecución Masivamente Paralela (GPU)}
 
@@ -164,7 +164,7 @@ La Tabla~\ref{tab:cpu_results} resume el desempeño de las configuraciones evalu
 
 \input{tab_cpu_results}
 
-La implementación escalar 1T establece la línea base sin aceleración con \macrocputputscalar~GB/s y \macrocpuenergyscalarnet~J/GB netos. La variante SHA-NI 1T eleva el throughput a \macrocputputshani~GB/s reduciendo la energía neta a \macrocpuenergyshaninet~J/GB. El escalado multihilo sobre E-cores alcanza \macrocputputfour~GB/s en 4T (\macrocpuenergyfournets{} netos) y \macrocputputeight~GB/s en 8T (\macrocpuenergyeightnet~J/GB netos), donde el rendimiento se estabiliza al saturar plenamente los 8 núcleos eficientes bajo el techo PL1.
+La implementación escalar 1T establece la línea base sin aceleración con \macrocputputscalar~GB/s y \macrocpuenergyscalarnet~J/GB netos. La variante SHA-NI 1T eleva el throughput a \macrocputputshani~GB/s reduciendo la energía neta a \macrocpuenergyshaninet~J/GB. El escalado multihilo sobre E-cores alcanza \macrocputputfour~GB/s en 4T (\macrocpuenergyfournets{} netos) y \macrocputputeight~GB/s en 8T (\macrocpuenergyeightnet~J/GB netos), donde el rendimiento se estabiliza al saturar plenamente los 8 núcleos eficientes bajo el techo PL1. Asimismo, 12 hilos sobre los 8 E-cores (sobresuscripción) rinden 5.62~GB/s, equivalente a 8T (5.60~GB/s), lo que confirma que los 8 E-cores ya están saturados bajo el límite PL1.
 
 Bajo la configuración heterogénea de 12 CPUs (P+E), la adopción de una cola de trabajo dinámica libre de cerrojos redujo el desbalance entre núcleos Golden Cove y Gracemont de 146.9~ms a 6.6~ms, elevando el throughput de 4.51~GB/s (particionamiento estático) a \macrocputputtwelvepe~GB/s (planificación dinámica) y posicionándola como la configuración de CPU más eficiente tanto en tasa útil como en consumo energético (\macrocpuenergytwelvepenets{} netos).
 

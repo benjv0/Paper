@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+  \caption{Barrido de tamaño de fragmento $C$ en CPU SHA-NI 4T}
+  \label{tab:cpu_sweep}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
+    \toprule
+    \textbf{$C$} & \textbf{$N$} & \textbf{$B$} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB neto} \\
+    \midrule
+    64~B     &   16\,777\,216 &   2 & 3.55 $\pm$ 0.00        &  55.45 & 4.13 $\pm$ 0.05 \\
+    1~KB     &    1\,048\,576 &  17 & 8.21 $\pm$ 0.01        &   8.01 & 1.73 $\pm$ 0.01 \\
+    4~KB     &       262\,144 &  65 & 8.72 $\pm$ 0.12        &   2.13 & 1.72 $\pm$ 0.01 \\
+    64~KB    &        16\,384 & 1025 & 8.97 $\pm$ 0.01        &   0.14 & 1.57 $\pm$ 0.01 \\
+    1~MB     &         1\,024 & 16385 & 8.99 $\pm$ 0.00        &   0.01 & 1.58 $\pm$ 0.01 \\
+    \bottomrule
+  \end{tabular}%
+  }
+\end{table}

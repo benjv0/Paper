@@ -1,0 +1,28 @@
+\begin{table}[htbp]
+  \caption{Comparación GPU: kernel v1 (base) vs.~v2 (alta utilización), staging pinned}
+  \label{tab:gpu_ablation}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{llcccc}
+    \toprule
+    \textbf{$C$} & \textbf{Kernel} & \textbf{Kernel-only (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Speedup$^a$} & \textbf{Mejora v1$\to$v2} \\
+    \midrule
+    64~B     & v1         &     4.11 & 2.04 $\pm$ 0.00      & 0.57$\times$ &      --- \\
+    64~B     & \textbf{v2} &    15.62 & 4.98 $\pm$ 0.02      & 1.40$\times$ & 3.8$\times$ \\
+    \midrule
+    1~KB     & v1         &     5.63 & 2.93 $\pm$ 0.01      & 0.36$\times$ &      --- \\
+    1~KB     & \textbf{v2} &    13.72 & 5.82 $\pm$ 0.00      & 0.71$\times$ & 2.4$\times$ \\
+    \midrule
+    4~KB     & v1         &     3.76 & 2.35 $\pm$ 0.00      & 0.27$\times$ &      --- \\
+    4~KB     & \textbf{v2} &     8.24 & 5.87 $\pm$ 0.01      & 0.67$\times$ & 2.2$\times$ \\
+    \midrule
+    64~KB    & v1         &     3.06 & 2.06 $\pm$ 0.00      & 0.23$\times$ &      --- \\
+    64~KB    & \textbf{v2} &    22.29 & 5.36 $\pm$ 0.01      & 0.60$\times$ & 7.3$\times$ \\
+    \midrule
+    1~MB     & v1         &     3.34 & 2.18 $\pm$ 0.00      & 0.24$\times$ &      --- \\
+    1~MB     & \textbf{v2} &     3.37 & 2.45 $\pm$ 0.00      & 0.27$\times$ & 1.0$\times$ \\
+    \bottomrule
+    \multicolumn{6}{l}{\footnotesize $^a$Speedup E2E vs.~CPU SHA-NI 4T al mismo tamaño de fragmento $C$.} \\
+  \end{tabular}%
+  }
+\end{table}

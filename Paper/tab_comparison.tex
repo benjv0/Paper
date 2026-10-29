@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+  \caption{Comparación cruzada de rendimiento y eficiencia energética ($C=64$~B)}
+  \label{tab:comparison}
+  \centering
+  \setlength{\tabcolsep}{3.5pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
+    \toprule
+    \textbf{Plataforma / Config.} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB neto (disp.)} & \textbf{J/GB neto (+host)} & \textbf{Speedup$^a$} \\
+    \midrule
+    Escalar 1T               & 0.11 $\pm$ 0.00      &   1.71 $\pm$ 0.00 & 45.58 $\pm$ 0.05 & 45.58 $\pm$ 0.05 & 0.03$\times$ \\
+    SHA-NI 4T (ref.)         & 3.55 $\pm$ 0.00      &  55.45 $\pm$ 0.01 &  4.13 $\pm$ 0.05 &  4.13 $\pm$ 0.05 & 1.00$\times$ \\
+    SHA-NI 8T                & 5.60 $\pm$ 0.02      &  87.45 $\pm$ 0.35 &  2.67 $\pm$ 0.05 &  2.67 $\pm$ 0.05 & 1.58$\times$ \\
+    SHA-NI 12T (8E sob.)     & 5.62 $\pm$ 0.07      &  87.77 $\pm$ 1.06 &  2.69 $\pm$ 0.09 &  2.69 $\pm$ 0.09 & 1.58$\times$ \\
+    SHA-NI 12 CPUs (P+E)     & 5.84 $\pm$ 0.02      &  91.25 $\pm$ 0.24 &  2.53 $\pm$ 0.02 &  2.53 $\pm$ 0.02 & 1.65$\times$ \\
+    GPU v2 kernel            & 15.62 $\pm$ 0.15     & 244.02 $\pm$ 2.38 &  1.62 $\pm$ 0.02 &  2.45 $\pm$ 0.04 & 4.40$\times$ \\
+    GPU v2 E2E pinned        & 4.98 $\pm$ 0.02      &  77.86 $\pm$ 0.33 &  3.49 $\pm$ 0.04 &  5.48 $\pm$ 0.07 & 1.40$\times$ \\
+    \midrule
+    FPGA (Spartan-7)         & \TODO{}             & \TODO{}          & \TODO{}         & \TODO{}         & \TODO{} \\
+    \bottomrule
+    \multicolumn{6}{l}{\footnotesize $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B). El speedup de GPU v2 kernel (aislado en VRAM) no es comparable con E2E.} \\
+    \multicolumn{6}{l}{\footnotesize J/GB neto (+host) suma la energía RAPL PKG del host durante la ejecución (excluye DRAM en todas las plataformas).} \\
+  \end{tabular}%
+  }
+\end{table}

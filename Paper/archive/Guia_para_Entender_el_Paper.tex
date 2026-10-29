@@ -1,0 +1,281 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage[margin=2.2cm,headheight=14pt]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage{microtype}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+
+% Configuración de colores
+\definecolor{primary}{RGB}{24, 76, 120}
+\definecolor{secondary}{RGB}{40, 116, 166}
+\definecolor{darktext}{RGB}{33, 37, 41}
+\definecolor{boxbg}{RGB}{240, 244, 248}
+\definecolor{boxborder}{RGB}{180, 205, 225}
+
+% Hipervínculos
+\hypersetup{
+    colorlinks=true,
+    linkcolor=secondary,
+    urlcolor=secondary,
+    citecolor=secondary
+}
+
+% Encabezados y pie de página
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}Guía Conceptual: SHA-256 en CPU, GPU y FPGA}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Comando para cajas destacadas
+\newcommand{\destacado}[1]{%
+    \par\vspace{0.8em}%
+    \noindent\colorbox{boxbg}{%
+        \parbox{\dimexpr\textwidth-2\fboxsep\relax}{%
+            \vspace{0.4em}%
+            \raggedright\itshape #1%
+            \vspace{0.4em}%
+        }%
+    }%
+    \par\vspace{0.8em}%
+}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\title{\Huge\bfseries\color{primary} Guía Didáctica del Paper\\[0.3em]
+\Large\color{secondary} Evaluación de Aceleradores Criptográficos para SHA-256\\en CPU, GPU y Hardware Reconfigurable (FPGA)}
+\author{\textbf{Documento de Acompañamiento y Divulgación}\\Para lectores no especializados}
+\date{Octubre 2026}
+
+\begin{document}
+
+\maketitle
+
+\destacado{\textbf{Propósito de este documento:} Esta guía explica de manera intuitiva, con analogías y un lenguaje accesible, todos los conceptos, tecnicismos, metodología y resultados del artículo científico. Si no tienes formación previa en criptografía, hardware o arquitectura de computadores, este documento te permitirá comprender exactamente qué se hizo, por qué es importante y cuáles fueron las conclusiones clave.}
+
+\tableofcontents
+\newpage
+
+% =========================================================================
+\section{¿De qué trata el paper en una sola oración?}
+% =========================================================================
+
+\destacado{\textbf{Idea central:} Se toma un algoritmo de seguridad mundialmente utilizado (SHA-256) y se mide de forma rigurosa qué tan rápido funciona y cuánta energía eléctrica consume al ejecutarse en tres tipos de procesadores muy diferentes: el procesador central del computador (CPU), una tarjeta gráfica (GPU) y un chip electrónico hecho a medida (FPGA).}
+
+% =========================================================================
+\section{Conceptos Fundamentales}
+% =========================================================================
+
+\subsection{¿Qué es una función hash?}
+Imagina una máquina trituradora de documentos muy especial: le introduces cualquier archivo (una sola palabra, una foto familiar o una enciclopedia de mil tomos) y siempre produce exactamente una tira de papel del mismo largo con un código alfanumérico. Esa tira es la \textbf{huella digital} del documento original.
+
+Una función hash posee cuatro propiedades indispensables:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Determinista:} Si le das el mismo documento un millón de veces, obtendrás siempre exactamente la misma huella digital.
+    \item \textbf{Irreversible (de un solo sentido):} A partir de la huella no puedes reconstruir el documento original (igual que no puedes reconstruir el papel triturado).
+    \item \textbf{Efecto avalancha (ultrasensible):} Si cambias un solo punto o coma en un libro entero, la huella resultante cambia por completo de forma caótica e impredecible.
+    \item \textbf{Resistencia a colisiones:} Es matemáticamente casi imposible encontrar dos archivos distintos que produzcan exactamente la misma huella.
+\end{enumerate}
+
+\subsection{¿Qué es SHA-256 y dónde se utiliza?}
+\textbf{SHA} significa \emph{Secure Hash Algorithm} (Algoritmo de Hash Seguro) y \textbf{256} indica que la huella digital resultante mide siempre exactamente \textbf{256 bits} (es decir, 32 bytes). Pertenece a la familia de estándares \textbf{SHA-2}, definida por el Instituto Nacional de Estándares y Tecnología de EE.\,UU. (NIST).
+
+En la vida cotidiana, SHA-256 está presente en:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Navegación web segura (HTTPS/TLS):} El candado del navegador web usa hashes para validar certificados digitales.
+    \item \textbf{Blockchain y Criptomonedas (Bitcoin):} Es el motor matemático central del protocolo de minería (\emph{Proof-of-Work}).
+    \item \textbf{Descarga e integridad de archivos:} Permite comprobar que un software descargado no contiene virus ni fue modificado en el camino.
+    \item \textbf{Almacenamiento de contraseñas:} Los servidores no guardan tu contraseña en texto plano, sino su hash SHA-256.
+    \item \textbf{Internet de las Cosas (IoT):} Sensores y dispositivos inteligentes verifican la autenticidad de los paquetes que transmiten.
+\end{itemize}
+
+\subsection{¿Cómo funciona SHA-256 por dentro? (Paso a paso simple)}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Preparación del mensaje:} Tomamos el mensaje de entrada (por ejemplo, los datos que queremos proteger).
+    \item \textbf{Relleno (\emph{Padding}):} La norma exige que el mensaje se procese en bloques de exactamente 512 bits (64 bytes). Si el mensaje no calza exacto, se le añade un bit `1', seguido de ceros, y al final se escriben 8 bytes que indican el tamaño original del mensaje.
+    \item \textbf{Compresión en rondas:} Cada bloque de 64 bytes pasa por una serie de \textbf{64 rondas matemáticas} sucesivas donde se mezclan sumas, rotaciones y operaciones lógicas con 64 constantes fijas.
+    \item \textbf{Digest final:} Al terminar todos los bloques, los registros internos producen la huella digital final de 32 bytes (\textbf{digest}).
+\end{enumerate}
+
+\destacado{\textbf{Clave del paper:} Si el mensaje original es corto (por ejemplo, 64 bytes), el relleno obligatorio obliga a crear un segundo bloque completo de 64 bytes solo para la longitud y el padding. Por lo tanto, ¡el 50\% del trabajo aritmético es trabajo administrativo de relleno! El paper analiza este impacto con precisión.}
+
+% =========================================================================
+\section{Los Tres Tipos de Hardware Comparados}
+% =========================================================================
+
+\subsection{CPU: El procesador convencional}
+\textbf{Modelo utilizado:} Intel Core i7-1255U (arquitectura Alder Lake, 10 núcleos).
+
+Es el procesador estándar que tiene un computador portátil. En este modelo conviven dos tipos de núcleos:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{P-cores (Performance):} 2 núcleos grandes y de máxima potencia monohilo.
+    \item \textbf{E-cores (Efficiency):} 8 núcleos compactos diseñados para realizar tareas paralelas consumiendo muy poca energía.
+\end{itemize}
+
+En el paper, todas las pruebas se fijaron estrictamente a los \textbf{E-cores} para garantizar condiciones térmicas y de concurrencia perfectamente repetibles. Se evaluaron dos variantes de código:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Escalar:} Código estándar que realiza las operaciones matemáticas una por una con instrucciones genéricas. Es la línea base tradicional.
+    \item \textbf{SHA-NI (\emph{SHA New Instructions}):} Extensiones especiales de hardware diseñadas por Intel que resuelven varias rondas de SHA-256 en un solo ciclo de instrucción.
+\end{itemize}
+
+\subsection{GPU: La tarjeta gráfica}
+\textbf{Modelo utilizado:} NVIDIA GeForce RTX 2050 (arquitectura Ampere, 2048 núcleos CUDA, 16 SMs, 4 GB VRAM).
+
+Mientras una CPU tiene unos pocos núcleos capaces de hacer tareas muy variadas, una GPU tiene \textbf{miles de núcleos pequeños} que trabajan todos en paralelo realizando la misma operación matemática sobre miles de fragmentos a la vez.
+
+\destacado{\textbf{Analogía:} Una CPU es como un profesor universitario brillante resolviendo problemas de alta dificultad en una pizarra. Una GPU es como un salón con 2000 estudiantes de escuela primaria resolviendo sumas sencillas al unísono: ninguno puede dictar una clase universitaria, pero entre todos suman millones de números por segundo.}
+
+\textbf{El desafío de la GPU:} Los datos no nacen en la tarjeta gráfica; están en la memoria RAM del computador. Tienen que viajar a través del bus \textbf{PCIe} hasta la tarjeta, procesarse allí y luego las huellas resultantes deben volver por el mismo bus PCIe.
+
+\subsection{FPGA: El circuito electrónico programable}
+\textbf{Modelo objetivo:} AMD/Xilinx Spartan-7.
+
+A diferencia de una CPU o una GPU donde el silicio ya está fabricado y tú solo ejecutas un programa de software, en una \textbf{FPGA} el chip es un lienzo de compuertas lógicas reconfigurables. Tú diseñas directamente el circuito electrónico mediante un lenguaje de hardware (Verilog). No hay sistema operativo, no hay instrucciones que interpretar ni retardos innecesarios: el circuito \emph{es} el algoritmo SHA-256.
+
+% =========================================================================
+\section{Glosario de Términos Técnicos y Métricas}
+% =========================================================================
+
+\subsection{Métricas de Rendimiento y Velocidad}
+\noindent\begin{tabularx}{\linewidth}{@{}p{3.8cm} X@{}}
+\toprule
+\textbf{Término} & \textbf{Explicación sencilla} \\
+\midrule
+\textbf{Throughput [GB/s]} & Cantidad de datos útiles que el sistema procesa por segundo. Cuanto más alto, más rápido. \\
+\addlinespace
+\textbf{Hashes/s (Mhash/s)} & Cantidad de huellas digitales calculadas por segundo (expresada en millones). \\
+\addlinespace
+\textbf{Bloques/s} & Cantidad de bloques de 64 bytes comprimidos por segundo. Toma en cuenta el trabajo de relleno. \\
+\addlinespace
+\textbf{Speedup} & Factor de aceleración: cuántas veces es más rápida una opción frente a una referencia fija. Por ejemplo, $4.91\times$ significa ``casi 5 veces más rápido''. \\
+\addlinespace
+\textbf{Kernel-only} & En GPU: mide solo el tiempo que la tarjeta gráfica pasa haciendo el cálculo puro, suponiendo los datos ya dentro de su memoria. \\
+\addlinespace
+\textbf{E2E (End-to-End)} & Rendimiento real de extremo a extremo: mide el envío de datos por PCIe + cálculo + retorno de los resultados a la CPU. \\
+\bottomrule
+\end{tabularx}
+
+\vspace{1.2em}
+\subsection{Métricas y Telemetría de Energía}
+\noindent\begin{tabularx}{\linewidth}{@{}p{3.8cm} X@{}}
+\toprule
+\textbf{Término} & \textbf{Explicación sencilla} \\
+\midrule
+\textbf{J/GB (Julios por GB)} & Cuánta energía eléctrica cuesta procesar 1 Gigabyte de datos. \textbf{Menor valor = mayor eficiencia energética}. \\
+\addlinespace
+\textbf{TDP (Thermal Design Power)} & Potencia máxima sostenida disipada en calor según el fabricante (15\,W para esta CPU, 30\,W para la GPU). \\
+\addlinespace
+\textbf{PL1 y PL2} & Límites de potencia de Intel: PL1 (15\,W) es el límite térmico sostenido; PL2 (39\,W) es un pico transitorio permitido por unos segundos. \\
+\addlinespace
+\textbf{RAPL (Intel)} & Sensores de hardware integrados en el procesador Intel que miden con precisión de microjulios la energía consumida por el paquete del chip. \\
+\addlinespace
+\textbf{NVML (NVIDIA)} & Interfaz de telemetría de NVIDIA que mide a 10\,Hz la potencia instantánea consumida por la placa gráfica. \\
+\addlinespace
+\textbf{Energía Neta} & Energía total bajo carga menos la energía que el equipo consume en reposo (evita penalizar el cómputo con el consumo base del sistema). \\
+\addlinespace
+\textbf{J/GB con host} & Medición integral que suma la potencia de la GPU más la potencia que gasta el procesador principal coordinando la prueba. \\
+\bottomrule
+\end{tabularx}
+
+\vspace{1.2em}
+\subsection{Términos de Memoria y GPU}
+\noindent\begin{tabularx}{\linewidth}{@{}p{3.8cm} X@{}}
+\toprule
+\textbf{Término} & \textbf{Explicación sencilla} \\
+\midrule
+\textbf{Bus PCIe Gen 4 $\times$4} & El canal físico que comunica la placa madre con la GPU. En este equipo ofrece un límite práctico de unos $\approx$6.4 GB/s efectivos. \\
+\addlinespace
+\textbf{Memoria Pinned} & Memoria RAM bloqueada que no puede ser paginada a disco. Permite a la GPU transferir datos a máxima velocidad mediante acceso directo DMA. \\
+\addlinespace
+\textbf{Memoria Pageable} & Memoria RAM normal de las aplicaciones. Para enviarla a la GPU, el sistema debe copiarla internamente primero, perdiendo rendimiento. \\
+\addlinespace
+\textbf{SM (Streaming Multiprocessor)} & Bloque de cómputo dentro de la GPU. La RTX 2050 tiene 16 SMs trabajando en paralelo. \\
+\addlinespace
+\textbf{Ocupación de registros} & Si un programa en GPU usa demasiados registros por hilo, caben menos hilos activos en el chip, reduciendo el rendimiento. El kernel v2 resolvió este problema bajando de 100 a $\le 48$ registros por hilo. \\
+\bottomrule
+\end{tabularx}
+
+% =========================================================================
+\section{El Experimento Paso a Paso}
+% =========================================================================
+
+Para que la comparación entre CPU, GPU y FPGA sea científicamente justa y representativa, se diseñó un protocolo riguroso:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Generación de datos homogéneos:} Se creó un archivo binario continuo de 1 Gigabyte exacto ($2^{30} = 1\,073\,741\,824$ bytes).
+    \item \textbf{División en fragmentos ($C$):} El archivo se divide en $N$ mensajes independientes de $C$ bytes. El caso de estudio primordial es $C = 64$ bytes, lo que genera \textbf{16\,777\,216 mensajes independientes}. Esto simula escenarios reales masivos como árboles de Merkle en blockchain o validación de paquetes en redes IoT.
+    \item \textbf{Retorno íntegro de resultados (\emph{output-mode full}):} Cada fragmento produce un digest de 32 bytes. El sistema debe almacenar en memoria la totalidad de los 16 millones de hashes (un bloque de salida de 512 MiB de resultados).
+    \item \textbf{Verificación criptográfica previa:} Antes de medir tiempos, el código valida 4 vectores oficiales del NIST y compara 10\,100 digests contra la librería criptográfica estándar de Python (\texttt{hashlib.sha256}). Si hay un solo bit erróneo, la prueba se aborta de inmediato.
+    \item \textbf{Protocolo térmico y estadístico:} 3 segundos de calentamiento previo descartado, bucles continuos de al menos 15 segundos por configuración y 5 repeticiones independientes para calcular medias y desviaciones estándar reales.
+\end{enumerate}
+
+% =========================================================================
+\section{Resultados Principales y Hallazgos Clave}
+% =========================================================================
+
+\subsection{Resultados en CPU: El impacto de SHA-NI}
+\begin{table}[htbp]
+\centering
+\begin{tabularx}{\textwidth}{l c c c Y}
+\toprule
+\textbf{Configuración} & \textbf{Throughput} & \textbf{Mhash/s} & \textbf{J/GB neto} & \textbf{Interpretación} \\
+\midrule
+Escalar 1T & 0.11 GB/s & 1.71 & 65.11 & Muy lento y con alto gasto energético. \\
+SHA-NI 1T  & 0.89 GB/s & 13.90 & 6.83 & $8.1\times$ más rápido con instrucciones dedicadas. \\
+SHA-NI 2T  & 1.78 GB/s & 27.78 & 5.16 & Escalado perfecto al 100\% de eficiencia. \\
+\textbf{SHA-NI 4T (Ref.)} & \textbf{3.54 GB/s} & \textbf{55.34} & \textbf{5.03} & \textbf{Punto de ancla del paper ($99.5\%$ eficiencia).} \\
+SHA-NI 8T  & 5.76 GB/s & 90.07 & 3.07 & Baja frecuencia de 3.47 a 2.86 GHz por límite térmico. \\
+SHA-NI 12T & 5.94 GB/s & 92.86 & 2.87 & \textbf{Máxima velocidad y máxima eficiencia en CPU.} \\
+\bottomrule
+\end{tabularx}
+\caption{Desempeño de la CPU i7-1255U en el escenario principal ($C=64$ bytes).}
+\end{table}
+
+\subsection{Resultados en GPU: Potencia bruta vs.\ Cuello de botella PCIe}
+\begin{table}[htbp]
+\centering
+\begin{tabularx}{\textwidth}{l c c c Y}
+\toprule
+\textbf{Kernel y Modo} & \textbf{Kernel-only} & \textbf{E2E (Real)} & \textbf{J/GB dev} & \textbf{Interpretación} \\
+\midrule
+v1 Pinned   & 4.11 GB/s & 2.04 GB/s & 26.56 & Versión base; muchos registros por hilo limitan el chip. \\
+\textbf{v2 Pinned} & \textbf{17.40 GB/s} & \textbf{5.01 GB/s} & \textbf{9.69} & \textbf{Optimizado: $4.2\times$ más veloz en cómputo que v1.} \\
+v2 Pageable & 17.22 GB/s & 3.94 GB/s & 11.73 & Pierde un 21.4\% de throughput por copias en RAM. \\
+\bottomrule
+\end{tabularx}
+\caption{Desempeño de la GPU RTX 2050 en el escenario principal ($C=64$ bytes).}
+\end{table}
+
+\subsection{El Gran Enfrentamiento: CPU vs.\ GPU}
+\destacado{%
+\textbf{¿Quién gana en el escenario principal ($C=64$ bytes)?}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{En velocidad bruta de cómputo puro:} La \textbf{GPU arrasa} con 17.40 GB/s en kernel-only (casi $3\times$ superior a los 5.94 GB/s de la mejor CPU).
+    \item \textbf{En velocidad real extremo a extremo (E2E):} Frente a la referencia estándar (CPU 4 hilos a 3.54 GB/s), la GPU v2 gana por un +41.5\% (5.01 GB/s). \textbf{Sin embargo, al activar todos los hilos de la CPU (SHA-NI 12T), la CPU supera a la GPU con 5.94 GB/s frente a 5.01 GB/s (+18.6\% a favor de la CPU).}
+    \item \textbf{En eficiencia energética (J/GB):} La \textbf{CPU es indiscutiblemente superior}. Para procesar 1 GB de datos útiles, la CPU SHA-NI 12T gasta solo \textbf{2.87 Julios}, mientras que la GPU gasta \textbf{9.69 Julios} a nivel de placa y \textbf{20.17 Julios} sumando la plataforma completa. ¡La CPU resulta entre 3.4 y 7 veces más eficiente!
+\end{itemize}
+}
+
+\subsubsection{¿Por qué ocurre este fenómeno inesperado?}
+La GPU tiene una potencia de cálculo inmensa, pero su talón de Aquiles en este escenario es el \textbf{volumen masivo de resultados}: al procesar 16 millones de fragmentos pequeños, se deben enviar de regreso a la CPU \textbf{512 Megabytes de hashes}. El bus PCIe se satura completamente transportando estos datos en ambas direcciones. En cambio, la CPU tiene su memoria RAM inmediatamente al lado de sus núcleos, eliminando todo retardo de bus.
+
+% =========================================================================
+\section{¿Por qué es Relevante esta Investigación?}
+% =========================================================================
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Impacto ambiental e industrial:} En 2023, la minería de criptoactivos consumió a nivel mundial más de 119.7 millones de MWh de electricidad. Cada reducción en Julios por hash se traduce en millones de dólares y miles de toneladas de emisiones de dióxido de carbono evitadas.
+    \item \textbf{Mito desmentido sobre las GPUs:} Comúnmente se asume que una GPU siempre será la opción óptima para acelerar cargas criptográficas. Esta investigación demuestra que cuando el tamaño de los mensajes es reducido y se requiere almacenar los hashes resultantes en el host, la sobrecarga de transferencia PCIe anula la ventaja del procesador gráfico.
+    \item \textbf{El poder de las instrucciones dedicadas (SHA-NI):} El silicio criptográfico integrado en las CPUs modernas permite obtener rendimientos sobresalientes con una fracción del consumo de energía de una tarjeta gráfica dedicada.
+    \item \textbf{El rol de la FPGA:} La arquitectura personalizada en FPGA (Fase final) promete unir lo mejor de ambos mundos: el procesamiento masivo paralelo y dedicado de la GPU, pero operando directamente sobre la ruta de datos sin las dependencias de transferencia del bus de un computador convencional.
+\end{itemize}
+
+\end{document}

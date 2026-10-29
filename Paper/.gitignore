@@ -1,0 +1,13 @@
+# LaTeX build and auxiliary files
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
+# Standalone binary
+tectonic

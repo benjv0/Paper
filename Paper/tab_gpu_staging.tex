@@ -1,0 +1,16 @@
+\begin{table}[htbp]
+  \caption{Impacto del staging en GPU v2 ($C=64$~B)}
+  \label{tab:gpu_staging}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccccc}
+    \toprule
+    \textbf{Staging} & \textbf{Kernel-only (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Ratio K/E2E} & \textbf{J/GB GPU} & \textbf{J/GB Host} & \textbf{J/GB Total} \\
+    \midrule
+    Pinned     & 15.62 $\pm$ 0.15 & 4.98 $\pm$ 0.02 & 3.13$\times$ & 3.49 $\pm$ 0.04 & 1.99 $\pm$ 0.04 & 5.48 $\pm$ 0.07 \\
+    Pageable   & 15.62 $\pm$ 0.15 & 3.86 $\pm$ 0.02 & 4.05$\times$ & 3.77 $\pm$ 0.03 & 2.57 $\pm$ 0.06 & 6.34 $\pm$ 0.09 \\
+    \bottomrule
+    \multicolumn{7}{l}{\footnotesize J/GB netos con $P_\text{reposo}$ de 4.44~W (GPU) y 5.15~W (Host RAPL PKG, excluye DRAM).} \\
+  \end{tabular}%
+  }
+\end{table}

@@ -1,0 +1,20 @@
+\begin{table}[htbp]
+  \caption{Resultados de CPU SHA-256 (i7-1255U, $C=64$~B, $N=16\,777\,216$, $B=2$)}
+  \label{tab:cpu_results}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Configuración} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB neto} & \textbf{Speedup$^a$} \\
+    \midrule
+    Escalar 1T               & 0.11 $\pm$ 0.00      &   1.71 & 45.58 $\pm$ 0.05 & 0.03$\times$ \\
+    \midrule
+    SHA-NI 1T                & 0.89 $\pm$ 0.00      &  13.90 & 5.28 $\pm$ 0.02 & 0.25$\times$ \\
+    SHA-NI 4T (ref.)         & 3.55 $\pm$ 0.00      &  55.45 & 4.13 $\pm$ 0.05 & 1.00$\times$ \\
+    SHA-NI 8T                & 5.60 $\pm$ 0.02      &  87.45 & 2.67 $\pm$ 0.05 & 1.58$\times$ \\
+    SHA-NI 12 CPUs (P+E)     & 5.84 $\pm$ 0.02      &  91.25 & 2.53 $\pm$ 0.02 & 1.65$\times$ \\
+    \bottomrule
+    \multicolumn{5}{l}{\footnotesize $^a$Speedup vs.~CPU SHA-NI 4T E2E. J/GB neto con $P_\text{reposo} = 5.15$~W (RAPL PKG).} \\
+  \end{tabular}%
+  }
+\end{table}

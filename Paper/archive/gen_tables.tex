@@ -1,0 +1,114 @@
+% Auto-generated combined LaTeX tables
+\begin{table}[htbp]
+  \caption{Resultados de CPU SHA-256 (i7-1255U, $C=64$~B, $N=16\,777\,216$, $B=2$)}
+  \label{tab:cpu_results}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
+    \toprule
+    \textbf{Config.} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB neto} & \textbf{Speedup$^a$} & \textbf{Speedup$^b$} \\
+    \midrule
+    Escalar 1T               & 0.11 $\pm$ 0.00      &   1.71 & 45.58 $\pm$ 0.05 & 0.03$\times$ & 1.00$\times$ \\
+    \midrule
+    SHA-NI 1T                & 0.89 $\pm$ 0.00      &  13.90 & 5.28 $\pm$ 0.02 & 0.25$\times$ & 8.13$\times$ \\
+    SHA-NI 2T                & 1.78 $\pm$ 0.00      &  27.78 & 4.47 $\pm$ 0.02 & 0.50$\times$ & 16.25$\times$ \\
+    SHA-NI 4T (ref.)         & 3.55 $\pm$ 0.00      &  55.45 & 4.13 $\pm$ 0.05 & 1.00$\times$ & 32.44$\times$ \\
+    SHA-NI 8T                & 5.60 $\pm$ 0.02      &  87.45 & 2.67 $\pm$ 0.05 & 1.58$\times$ & 51.16$\times$ \\
+    SHA-NI 12T (8E sob.)     & 5.62 $\pm$ 0.07      &  87.77 & 2.69 $\pm$ 0.09 & 1.58$\times$ & 51.35$\times$ \\
+    SHA-NI 12 CPUs (P+E)     & 5.84 $\pm$ 0.02      &  91.25 & 2.53 $\pm$ 0.02 & 1.65$\times$ & 53.38$\times$ \\
+    \bottomrule
+    \multicolumn{6}{l}{\footnotesize $^a$Referencia principal: SHA-NI 4T E2E. $^b$Referencia secundaria: Escalar 1T.} \\
+    \multicolumn{6}{l}{\footnotesize Nota: 12T (8E sob.) ejecuta 12 hilos sobre 8 E-cores en sobresuscripción; 12 CPUs (P+E) usa núcleos lógicos 0--11.} \\
+  \end{tabular}%
+  }
+\end{table}
+
+\begin{table}[htbp]
+  \caption{Barrido de tamaño de fragmento $C$ en CPU SHA-NI 4T}
+  \label{tab:cpu_sweep}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
+    \toprule
+    \textbf{$C$} & \textbf{$N$} & \textbf{$B$} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB neto} \\
+    \midrule
+    64~B     &   16\,777\,216 &   2 & 3.55 $\pm$ 0.00        &  55.45 & 4.13 $\pm$ 0.05 \\
+    1~KB     &    1\,048\,576 &  17 & 8.21 $\pm$ 0.01        &   8.01 & 1.73 $\pm$ 0.01 \\
+    4~KB     &       262\,144 &  65 & 8.72 $\pm$ 0.12        &   2.13 & 1.72 $\pm$ 0.01 \\
+    64~KB    &        16\,384 & 1025 & 8.97 $\pm$ 0.01        &   0.14 & 1.57 $\pm$ 0.01 \\
+    1~MB     &         1\,024 & 16385 & 8.99 $\pm$ 0.00        &   0.01 & 1.58 $\pm$ 0.01 \\
+    \bottomrule
+  \end{tabular}%
+  }
+\end{table}
+
+\begin{table}[htbp]
+  \caption{Comparación GPU: kernel v1 (base) vs.~v2 (alta utilización), staging pinned}
+  \label{tab:gpu_ablation}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{llcccc}
+    \toprule
+    \textbf{$C$} & \textbf{Kernel} & \textbf{Kernel-only (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Speedup$^a$} & \textbf{Mejora v1$\to$v2} \\
+    \midrule
+    64~B     & v1         &     4.11 & 2.04 $\pm$ 0.00      & 0.57$\times$ &      --- \\
+    64~B     & \textbf{v2} &    15.62 & 4.98 $\pm$ 0.02      & 1.40$\times$ & 3.8$\times$ \\
+    \midrule
+    1~KB     & v1         &     5.63 & 2.93 $\pm$ 0.01      & 0.36$\times$ &      --- \\
+    1~KB     & \textbf{v2} &    13.72 & 5.82 $\pm$ 0.00      & 0.71$\times$ & 2.4$\times$ \\
+    \midrule
+    4~KB     & v1         &     3.76 & 2.35 $\pm$ 0.00      & 0.27$\times$ &      --- \\
+    4~KB     & \textbf{v2} &     8.24 & 5.87 $\pm$ 0.01      & 0.67$\times$ & 2.2$\times$ \\
+    \midrule
+    64~KB    & v1         &     3.06 & 2.06 $\pm$ 0.00      & 0.23$\times$ &      --- \\
+    64~KB    & \textbf{v2} &    22.29 & 5.36 $\pm$ 0.01      & 0.60$\times$ & 7.3$\times$ \\
+    \midrule
+    1~MB     & v1         &     3.34 & 2.18 $\pm$ 0.00      & 0.24$\times$ &      --- \\
+    1~MB     & \textbf{v2} &     3.37 & 2.45 $\pm$ 0.00      & 0.27$\times$ & 1.0$\times$ \\
+    \bottomrule
+    \multicolumn{6}{l}{\footnotesize $^a$Speedup E2E vs.~CPU SHA-NI 4T al mismo tamaño de fragmento $C$.} \\
+  \end{tabular}%
+  }
+\end{table}
+
+\begin{table}[htbp]
+  \caption{Impacto del staging en GPU v2 ($C=64$~B)}
+  \label{tab:gpu_staging}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccccc}
+    \toprule
+    \textbf{Staging} & \textbf{Kernel-only (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Ratio K/E2E} & \textbf{J/GB GPU} & \textbf{J/GB Host} & \textbf{J/GB Total} \\
+    \midrule
+    Pinned     & 15.62 $\pm$ 0.15 & 4.98 $\pm$ 0.02 & 3.13$\times$ & 3.49 $\pm$ 0.04 & 1.99 $\pm$ 0.04 & 5.48 $\pm$ 0.07 \\
+    Pageable   & 15.62 $\pm$ 0.15 & 3.86 $\pm$ 0.02 & 4.05$\times$ & 3.77 $\pm$ 0.03 & 2.57 $\pm$ 0.06 & 6.34 $\pm$ 0.09 \\
+    \bottomrule
+    \multicolumn{7}{l}{\footnotesize J/GB netos con $P_\text{reposo}$ de 4.44~W (GPU) y 5.15~W (Host RAPL PKG, excluye DRAM).} \\
+  \end{tabular}%
+  }
+\end{table}
+
+\begin{table}[htbp]
+  \caption{Comparación cruzada de rendimiento y eficiencia energética ($C=64$~B)}
+  \label{tab:comparison}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Plataforma / Config.} & \textbf{Throughput (GB/s)} & \textbf{J/GB neto (disp.)} & \textbf{J/GB neto (+host)} & \textbf{Speedup$^a$} \\
+    \midrule
+    Escalar 1T               & 0.11 $\pm$ 0.00      & 45.58 $\pm$ 0.05 & 45.58 $\pm$ 0.05 & 0.03$\times$ \\
+    SHA-NI 4T (ref.)         & 3.55 $\pm$ 0.00      & 4.13 $\pm$ 0.05 & 4.13 $\pm$ 0.05 & 1.00$\times$ \\
+    SHA-NI 8T                & 5.60 $\pm$ 0.02      & 2.67 $\pm$ 0.05 & 2.67 $\pm$ 0.05 & 1.58$\times$ \\
+    SHA-NI 12T (8E sob.)     & 5.62 $\pm$ 0.07      & 2.69 $\pm$ 0.09 & 2.69 $\pm$ 0.09 & 1.58$\times$ \\
+    SHA-NI 12 CPUs (P+E)     & 5.84 $\pm$ 0.02      & 2.53 $\pm$ 0.02 & 2.53 $\pm$ 0.02 & 1.65$\times$ \\
+    GPU v2 kernel            & 15.62 $\pm$ 0.15     & 1.62 $\pm$ 0.02 & 2.45 $\pm$ 0.04 & 4.40$\times$ \\
+    GPU v2 E2E pinned        & 4.98 $\pm$ 0.02      & 3.49 $\pm$ 0.04 & 5.48 $\pm$ 0.07 & 1.40$\times$ \\
+    \midrule
+    FPGA (Spartan-7)         & \TODO{}             & \TODO{}       & \TODO{}       & \TODO{} \\
+    \bottomrule
+    \multicolumn{5}{l}{\footnotesize $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B). El speedup de GPU v2 kernel (aislado en VRAM) no es comparable con E2E.} \\
+    \multicolumn{5}{l}{\footnotesize J/GB neto (+host) suma la energía RAPL PKG del host durante la ejecución (excluye DRAM en todas las plataformas).} \\
+  \end{tabular}%
+  }
+\end{table}

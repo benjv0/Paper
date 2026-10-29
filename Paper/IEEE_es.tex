@@ -172,7 +172,9 @@ El barrido paramétrico en función de $C$ para SHA-NI 4T (representado en la cu
 
 \subsection{Resultados de GPU}
 
-La comparación entre los kernels v1 (base) y v2 (alta utilización) a lo largo del barrido de $C$ se ilustra en la Figura~\ref{fig:throughput_vs_c} (staging pinned). El kernel v2 domina ampliamente en concurrencia masiva: en $C=64$~B logra \macrogputputkernel~GB/s kernel-only (mejora de 3.8$\times$ sobre los 4.11~GB/s de v1), alcanzando un pico de \macrogpupeakkernel~GB/s en $C=64$~KB (7.3$\times$ vs.~v1). En $C=1$~MB, ambos kernels convergen a $\approx$3.34--3.37~GB/s al disponer de solo $N=1\,024$ fragmentos; se plantea como hipótesis que con tan pocos bloques activos la latencia de acceso a memoria global no logra ocultarse eficientemente debido al bajo número de warps en vuelo.
+La comparación entre los kernels v1 (base) y v2 (alta utilización) a lo largo del barrido de $C$ se resume en la Tabla~\ref{tab:c_sweep} y se ilustra en la Figura~\ref{fig:throughput_vs_c} (staging pinned). El kernel v2 domina ampliamente en concurrencia masiva: en $C=64$~B logra \macrogputputkernel~GB/s kernel-only (mejora de 3.8$\times$ sobre los 4.11~GB/s de v1), alcanzando un pico de \macrogpupeakkernel~GB/s en $C=64$~KB (7.3$\times$ vs.~v1). En $C=1$~MB, ambos kernels convergen a $\approx$3.34--3.37~GB/s al disponer de solo $N=1\,024$ fragmentos; se plantea como hipótesis que con tan pocos bloques activos la latencia de acceso a memoria global no logra ocultarse eficientemente debido al bajo número de warps en vuelo.
+
+\input{tab_c_sweep}
 
 La Tabla~\ref{tab:gpu_staging} cuantifica el impacto del staging de memoria en $C=64$~B. Mientras que el throughput kernel-only es idéntico entre pinned y pageable (\macrogputputkernel~GB/s), el throughput E2E se degrada un 22.5\% en pageable (de \macrogputputeetwopinned~a \macrogputputeetwopageable~GB/s) debido a la copia intermedia síncrona en el driver, incrementando el consumo total del host de 1.99 a 2.57~J/GB netos (+29.1\%) y elevando el consumo del sistema completo de \macrogpuenergyeetwoconhosts{} a \macrogpuenergyeetwopageableconhosts{} netos.
 
@@ -187,7 +189,7 @@ El enlace opera en modo PCIe Gen~4 $\times$4, cuyo ancho de banda teórico simpl
     \label{fig:throughput_vs_c}
 \end{figure}
 
-Como sintetiza la Figura~\ref{fig:throughput_vs_c}, la GPU v2 supera a la CPU SHA-NI 4T en throughput E2E únicamente en el escenario de fragmentos mínimos $C=64$~B (\macrogputputeetwopinned~GB/s frente a \macrocputputfour~GB/s). Para todo $C \geq 1$~KB, la CPU SHA-NI 4T supera con claridad el rendimiento E2E de la GPU (alcanzando 8.21~GB/s en 1~KB y 8.99~GB/s en 1~MB), beneficiándose de operar en la memoria principal del host sin cruzar el enlace PCIe.
+Como sintetizan la Figura~\ref{fig:throughput_vs_c} y la Tabla~\ref{tab:c_sweep}, la GPU v2 supera a la CPU SHA-NI 4T en throughput E2E únicamente en el escenario de fragmentos mínimos $C=64$~B (\macrogputputeetwopinned~GB/s frente a \macrocputputfour~GB/s). Para todo $C \geq 1$~KB, la CPU SHA-NI 4T supera con claridad el rendimiento E2E de la GPU (alcanzando 8.21~GB/s en 1~KB y 8.99~GB/s en 1~MB), beneficiándose de operar en la memoria principal del host sin cruzar el enlace PCIe.
 
 \subsection{Comparación CPU vs.~GPU}
 

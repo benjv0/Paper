@@ -1,0 +1,20 @@
+\begin{table}[htbp]
+  \caption{Barrido de tamaño de fragmento $C$ en CPU SHA-NI 4T y GPU v2}
+  \label{tab:c_sweep}
+  \centering
+  \setlength{\tabcolsep}{3pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccccc}
+    \toprule
+    \textbf{$C$} & \textbf{$N$} & \textbf{$B$} & \textbf{CPU SHA-NI 4T (GB/s)} & \textbf{GPU v2 kernel (GB/s)} & \textbf{GPU v2 E2E (GB/s)} & \textbf{Speedup E2E$^a$} \\
+    \midrule
+    64~B  & 16\,777\,216 &     2 & 3.55 $\pm$ 0.00 & 15.62 $\pm$ 0.15 & 4.98 $\pm$ 0.02 & 1.40$\times$ \\
+    1~KB  &  1\,048\,576 &    17 & 8.21 $\pm$ 0.01 & 13.72 $\pm$ 6.26 & 5.82 $\pm$ 0.00 & 0.71$\times$ \\
+    4~KB  &     262\,144 &    65 & 8.72 $\pm$ 0.12 &  8.24 $\pm$ 0.04 & 5.87 $\pm$ 0.01 & 0.67$\times$ \\
+    64~KB &      16\,384 &  1025 & 8.97 $\pm$ 0.01 & 22.29 $\pm$ 0.10 & 5.36 $\pm$ 0.01 & 0.60$\times$ \\
+    1~MB  &       1\,024 & 16385 & 8.99 $\pm$ 0.00 &  3.37 $\pm$ 0.00 & 2.45 $\pm$ 0.00 & 0.27$\times$ \\
+    \bottomrule
+    \multicolumn{7}{l}{\footnotesize $^a$Speedup E2E = Throughput GPU v2 E2E pinned / Throughput CPU SHA-NI 4T.} \\
+  \end{tabular}%
+  }
+\end{table}

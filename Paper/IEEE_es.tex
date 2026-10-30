@@ -82,7 +82,7 @@ Para evaluar exhaustivamente el rendimiento y la eficiencia energética de SHA-2
 
 \subsection{Workload Unificado y Métricas de Rendimiento}
 
-El conjunto de datos consiste en un archivo binario continuo preexistente (\texttt{dummy\_1GB.bin}) de tamaño exacto $2^{30}$~bytes (1\,073\,741\,824~B = 1~GiB) compuesto por datos pseudoaleatorios (Semilla fija). Para modelar mensajes independientes, el archivo se particiona en:
+El conjunto de datos consiste en un archivo binario de $2^{30}$~bytes (1\,073\,741\,824~B = 1~GiB) generado con un PRNG de semilla fija. Para modelar mensajes independientes, el archivo se particiona en:
 \begin{equation}
 N = \left\lfloor \frac{2^{30}}{C} \right\rfloor
 \label{eq:num_chunks}

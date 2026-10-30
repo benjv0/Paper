@@ -159,8 +159,8 @@ def plot_throughput_vs_c(df: pd.DataFrame, out_path: str = "Paper/throughput_vs_
     ax.set_title("Throughput de SHA-256 vs Tamaño de Fragmento $C$")
     ax.set_xticks(x)
     ax.set_xticklabels(x_labels)
-    ax.set_ylim(0, 26)
-    ax.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="#cccccc", fontsize=8.2)
+    ax.set_ylim(0, 28)
+    ax.legend(loc="upper left", ncol=3, frameon=True, facecolor="white", edgecolor="#cccccc", fontsize=7.2)
     ax.grid(True, linestyle=":", alpha=0.6, axis="y")
 
     plt.tight_layout()

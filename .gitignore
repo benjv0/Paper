@@ -26,3 +26,5 @@ RevProfe.pdf
 # Auxiliares de LaTeX
 *.synctex
 *.synctex.gz
+# Borrador de envío a IEEE Latin IoT 2027 (no se publica)
+Paper/latiniot2027*

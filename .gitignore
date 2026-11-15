@@ -17,3 +17,12 @@ scratch/
 *~
 *.swp
 __pycache__/
+
+# ── Material local que no se publica ──────────────────────────────────
+# PDFs de referencias (con derechos de autor) y archivos personales
+REF/
+# Revisión del profesor con comentarios
+RevProfe.pdf
+# Auxiliares de LaTeX
+*.synctex
+*.synctex.gz

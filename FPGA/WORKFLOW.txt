@@ -1,0 +1,98 @@
+============================================================================
+ WORKFLOW DE EJECUCIONES  -  Escalado multinucleo SHA-256 (SP701)
+============================================================================
+Regla general: antes de cualquier reporte, entra con "cd" a la carpeta del N
+que estas midiendo. Asi cada archivo queda guardado directamente donde va y
+no se sobrescribe el de otro N.
+
+   Carpeta base:  C:/Users/Benjamin Oyarzun/Downloads/FPGA
+   Scripts:       C:/Users/Benjamin Oyarzun/Downloads/FPGA/Scripts
+
+IMPORTANTE: tus proyectos de Vivado leen los .v y .xdc desde Descargas.
+No borres esos archivos de Descargas (o vuelve a agregarlos desde FPGA/RTL
+antes de borrarlos), o los proyectos dejaran de compilar.
+
+
+----------------------------------------------------------------------------
+ PENDIENTES (en este orden)
+----------------------------------------------------------------------------
+ 1. N = 4  -> reporte sin simulacion           (proyecto sha-256-pwr)
+ 2. N = 1  -> SAIF + sin simulacion            (proyecto sha-256-pwr)
+ 3. N = 8  -> sin simulacion (opcional)        (proyecto sha-256-pwr)
+ 4. N = 4  -> corridas en placa (opcional)     (proyecto SHA-256)
+Con 1 y 2 se calibra la potencia de N = 16 y 24 (el SAIF no cabe en la
+licencia gratuita de XSim por encima de ~50 000 instancias, es decir N > 8).
+
+
+----------------------------------------------------------------------------
+ 1. N = 4: reporte sin simulacion
+----------------------------------------------------------------------------
+El proyecto sha-256-pwr ya esta implementado con N_CORES = 4.
+  a) Si el diseno implementado esta abierto, CIERRALO (la X de
+     "Implemented Design"): asi se descarta el SAIF que leiste antes.
+  b) Open Implemented Design, y en la Tcl Console:
+        cd {C:/Users/Benjamin Oyarzun/Downloads/FPGA/N=4}
+        set_switching_activity -deassert_resets
+        report_power -hierarchical_depth 2 -file power_vectorless_N4.txt
+        report_utilization -hierarchical -hierarchical_depth 3 -file util_pwr_N4.txt
+        report_timing_summary -file timing_pwr_N4.txt
+
+
+----------------------------------------------------------------------------
+ PLANTILLA: potencia de un N en el proyecto sha-256-pwr
+ (reemplaza 1 por el N que corresponda en TODO el bloque)
+----------------------------------------------------------------------------
+  a) En sp701_pwr_multi_top.v:   parameter integer N_CORES = 1   (Ctrl+S)
+  b) Run Implementation (acepta relanzar sintesis si lo pide).
+  c) Open Implemented Design. Reporte SIN simulacion primero:
+        cd {C:/Users/Benjamin Oyarzun/Downloads/FPGA/N=1}
+        set_switching_activity -deassert_resets
+        report_power -hierarchical_depth 2 -file power_vectorless_N1.txt
+        report_utilization -hierarchical -hierarchical_depth 3 -file util_pwr_N1.txt
+        report_timing_summary -file timing_pwr_N1.txt
+  d) Cierra el diseno implementado.
+  e) SAIF (solo N <= 8): Run Simulation -> Run Post-Implementation
+     Functional Simulation, y en la Tcl Console:
+        restart
+        run 50 us
+        open_saif {C:/Users/Benjamin Oyarzun/Downloads/FPGA/N=1/sha_pwr_N1.saif}
+        log_saif [get_objects -r /tb_pwr_multi/dut/*]
+        run 200 us
+        close_saif
+  f) Cierra la simulacion. Open Implemented Design, y:
+        cd {C:/Users/Benjamin Oyarzun/Downloads/FPGA/N=1}
+        read_saif -strip_path tb_pwr_multi/dut {C:/Users/Benjamin Oyarzun/Downloads/FPGA/N=1/sha_pwr_N1.saif}
+        report_power -hierarchical_depth 2 -file power_saif_N1.txt
+     Revisa: Confidence Level = High, y anota u_multi en "By Hierarchy".
+
+  Para N = 8 (paso 3 de pendientes) haz solo a), b) y c).
+
+
+----------------------------------------------------------------------------
+ PLANTILLA: corridas en la placa (proyecto SHA-256)   (ej. N = 4)
+----------------------------------------------------------------------------
+  a) En sp701_multi_top.v:   parameter integer N_CORES = 4   (Ctrl+S)
+  b) Generate Bitstream. Open Implemented Design. Revisa WNS y WHS >= 0
+     (si WNS < 0: impl_1 -> Change Run Settings -> Strategy
+      Performance_ExplorePostRoutePhysOpt, y regenerar).
+  c) Reportes:
+        cd {C:/Users/Benjamin Oyarzun/Downloads/FPGA/N=4}
+        report_timing_summary -file timing_N4.txt
+        report_utilization -hierarchical -hierarchical_depth 3 -file util_N4.txt
+  d) Open Hardware Manager -> Open Target -> Auto Connect -> Program Device
+     (.bit y .ltx de impl_1; LED D6 encendido).
+  e) Corridas (~5,5 min, Vivado queda congelado mientras espera):
+        cd {C:/Users/Benjamin Oyarzun/Downloads/FPGA/N=4}
+        set OUT_NAME vio_runs_N4.csv
+        source {C:/Users/Benjamin Oyarzun/Downloads/FPGA/Scripts/vio_runs.tcl}
+  f) Analisis en PowerShell (muestra y guarda la salida):
+        cd "C:\Users\Benjamin Oyarzun\Downloads\FPGA\N=4"
+        py ..\Scripts\analyze_multi.py vio_runs_N4.csv --cores 4 --pdyn 0.139 | Tee-Object analisis_N4.txt
+     Debe terminar en "RESULTADO: TODO OK".
+
+
+----------------------------------------------------------------------------
+ Que enviarme al terminar
+----------------------------------------------------------------------------
+  Nada que copiar a mano: tu PC esta vinculado a esta sesion, asi que puedo
+  leer directamente la carpeta FPGA. Solo avisame que terminaste.

@@ -1,0 +1,23 @@
+py analyze_multi.py vio_runs_N24.csv --cores 24   (salida copiada del chat, 13-nov-2026)
+Diseno de 24 nucleos, 5 corridas
+run  segundos   msg/nucleo   msg totales        ciclos  ciclos/msg  f_est[MHz]  GB/s(PC)
+  1    60.040     44134137    1059219288    6002242632    136.0000     99.971     1.1291
+  2    60.033     44132103    1059170472    6001966008    136.0000     99.978     1.1292
+  3    60.039     44132203    1059172872    6001979608    136.0000     99.968     1.1291
+  4    60.035     44131171    1059148104    6001839256    136.0000     99.972     1.1291
+  5    60.039     44133832    1059211968    6002201152    136.0000     99.972     1.1291
+Verificando 24 cadenas (5562817200 hashes en total) con 12 procesos... (1591 s)
+[OK] corrida 1: XOR de 24 digests tras 46363011 mensajes/nucleo coincide
+[OK] corrida 2: XOR de 24 digests tras 92716730 mensajes/nucleo coincide
+[OK] corrida 3: XOR de 24 digests tras 139073583 mensajes/nucleo coincide
+[OK] corrida 4: XOR de 24 digests tras 185430584 mensajes/nucleo coincide
+[OK] corrida 5: XOR de 24 digests tras 231784050 mensajes/nucleo coincide
+=== Resumen (N = 24, 5 corridas) ===
+Ciclos por mensaje (por nucleo) : 136 (exacto, contado por la FPGA)
+Frecuencia estimada (PC)        : 99.972 +/- 0.004 MHz
+GB/s medidos con reloj del PC   : 1.1291 +/- 0.0000
+Mhash/s totales a 100 MHz       : 17.6471
+GB/s utiles totales a 100 MHz   : 1.12941
+Mbps por bloque totales (banco) : 18070.59
+RESULTADO: TODO OK
+(Potencia: SAIF no posible por limite de licencia de XSim; ver power_vectorless_N24.txt)

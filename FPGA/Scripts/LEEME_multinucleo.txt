@@ -1,0 +1,117 @@
+============================================================================
+ ESCALADO MULTINUCLEO SHA-256 EN LA SP701  -  Guia paso a paso
+============================================================================
+
+Que cambia respecto del diseno de 1 nucleo
+  - El nucleo SHA-256 (sha_256.v) NO cambia.
+  - sha256_bench.v tiene un parametro nuevo CORE_ID (con CORE_ID = 0 es
+    identico al banco ya medido). Reemplaza tu sha256_bench.v por este.
+  - sha256_multi.v pone N bancos en paralelo, sincronizados, y entrega el
+    XOR de sus digests. Usa los MISMOS nombres de senales que el banco de 1
+    nucleo, asi el VIO vio_0, el XDC sp701.xdc y vio_runs.tcl sirven tal cual.
+
+Archivos
+  sha256_bench.v          (reemplaza el tuyo)        design source, ambos proyectos
+  sha256_multi.v          (nuevo)                    design source, ambos proyectos
+  sp701_multi_top.v       top con VIO (placa)        proyecto SHA-256
+  sp701_pwr_multi_top.v   top sin VIO (SAIF)         proyecto sha-256-pwr
+  tb_sha256_multi.v       testbench de 4 nucleos     simulation source, SHA-256
+  tb_pwr_multi.v          estimulo para el SAIF      simulation source, sha-256-pwr
+  vio_runs.tcl            5 corridas (nombre de CSV configurable)
+  analyze_multi.py        analisis y verificacion de N cadenas
+
+Valores de N recomendados:  1, 4, 8, 16, 24
+  - Empieza por N = 4 para validar el flujo completo.
+  - N = 24 usa ~78 % de las LUT. Si no cierra timing o no se puede colocar,
+    usa N = 20.
+  - N = 1: el throughput ya esta medido (136 ciclos/mensaje no cambia), asi
+    que basta con implementacion y SAIF para tener area y potencia con el
+    mismo envoltorio que los demas N. Las corridas en placa son opcionales.
+
+
+----------------------------------------------------------------------------
+ A. PREPARACION (una sola vez)
+----------------------------------------------------------------------------
+Proyecto SHA-256 (el que tiene el VIO):
+  1. Reemplaza sha256_bench.v por el nuevo (o quita el viejo con Remove File
+     y agrega el nuevo).
+  2. Add Sources -> design sources: sha256_multi.v y sp701_multi_top.v.
+  3. Add Sources -> simulation sources: tb_sha256_multi.v.
+  4. Clic derecho en sp701_multi_top -> Set as Top.
+  5. Simulacion (una vez): clic derecho en tb_sha256_multi -> Set as Top,
+     Run Behavioral Simulation, y en la Tcl Console:  run all
+     Debe terminar con:
+        [2] Mensajes por nucleo = 21 (total 84), ciclos = 2856  -> PASS / PASS
+        [3] ... PASS
+        [4] mensajes por nucleo = 27, ciclos = 3672             -> PASS / PASS
+        *** TODAS LAS PRUEBAS PASARON ***
+
+Proyecto sha-256-pwr:
+  6. Reemplaza sha256_bench.v por el nuevo.
+  7. Add Sources: sha256_multi.v y sp701_pwr_multi_top.v (design),
+     tb_pwr_multi.v (simulation).
+  8. Constraints: quita sp701_pwr.xdc y agrega sp701.xdc (el del proyecto
+     con VIO: una sola salida led). Asi la potencia estatica de I/O es la
+     misma que en el diseno medido.
+  9. Set as Top: sp701_pwr_multi_top (design) y tb_pwr_multi (simulation).
+
+
+----------------------------------------------------------------------------
+ B. POR CADA N  (ejemplo con N = 8)
+----------------------------------------------------------------------------
+--- B1. Medicion en la placa (proyecto SHA-256) ---
+  1. En sp701_multi_top.v cambia:   parameter integer N_CORES = 8
+  2. Generate Bitstream.
+  3. Abre el diseno implementado y en la Tcl Console guarda los reportes:
+        report_timing_summary -file timing_N8.txt
+        report_utilization -hierarchical -hierarchical_depth 3 -file util_N8.txt
+     Revisa que WNS y WHS sean >= 0.
+  4. Program device con el .bit y el .ltx de impl_1 (LED D6 encendido).
+  5. En la Tcl Console:
+        cd {C:/Users/Benjamin Oyarzun/Downloads}
+        set OUT_NAME vio_runs_N8.csv
+        source vio_runs.tcl
+     (~5,5 min; Vivado queda congelado mientras espera).
+     IMPORTANTE: escribe siempre el set OUT_NAME con el N correcto antes del
+     source, o sobrescribiras el CSV anterior.
+
+--- B2. Potencia con SAIF (proyecto sha-256-pwr) ---
+  6. En sp701_pwr_multi_top.v cambia:   parameter integer N_CORES = 8
+  7. Run Implementation (no hace falta bitstream).
+  8. Run Simulation -> Run Post-Implementation Functional Simulation, y:
+        restart
+        run 50 us
+        open_saif sha_pwr_N8.saif
+        log_saif [get_objects -r /tb_pwr_multi/dut/*]
+        run 200 us
+        close_saif
+     (200 us = 20 000 ciclos, ~147 mensajes por nucleo: suficiente para la
+      actividad en regimen; con N grande la simulacion tarda bastante mas).
+  9. Cierra la simulacion, Open Implemented Design, y:
+        read_saif -strip_path tb_pwr_multi/dut {C:/Users/Benjamin Oyarzun/sha-256-pwr/sha-256-pwr.sim/sim_1/impl/func/xsim/sha_pwr_N8.saif}
+        report_power -hierarchical_depth 2 -file power_saif_N8.txt
+     En power_saif_N8.txt revisa: Confidence Level = High, y anota la
+     potencia de u_multi en "By Hierarchy" (dinamica del banco completo).
+
+--- B3. Analisis (PowerShell, carpeta Downloads) ---
+ 10. py analyze_multi.py vio_runs_N8.csv --cores 8 --pdyn <potencia de u_multi>
+     Debe terminar en "RESULTADO: TODO OK": 136 ciclos/mensaje en todas las
+     corridas y los 5 XOR coincidiendo con hashlib.
+     La verificacion recalcula N cadenas en paralelo con todos los nucleos
+     del PC; con N = 24 puede tardar del orden de 10 a 30 minutos.
+
+--- Lo que debes enviarme por cada N ---
+  - Salida de analyze_multi.py
+  - util_N8.txt, timing_N8.txt (o WNS/WHS y la fila de u_multi)
+  - power_saif_N8.txt
+
+
+----------------------------------------------------------------------------
+ C. SI ALGO FALLA
+----------------------------------------------------------------------------
+  - El testbench no da PASS: no sigas; enviame la salida de la consola.
+  - WNS negativo con N grande: baja N (24 -> 20) o enviame timing_N.txt.
+  - "Esperaba 1 probe": ejecuta  get_hw_probes -of_objects [get_hw_vios]
+    y enviame la salida.
+  - El XOR no coincide pero los ciclos si: revisa que --cores sea el N
+    programado en la placa.

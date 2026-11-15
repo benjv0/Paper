@@ -1,0 +1,56 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2026.1 (win64) Build 6511674 Tue Jun 16 11:02:23 MDT 2026
+| Date         : Fri Nov 13 17:04:04 2026
+| Host         : DESKTOP-MKNN8QE running 64-bit major release  (build 9200)
+| Command      : report_utilization -hierarchical -hierarchical_depth 3 -file util_pwr_N8.txt
+| Design       : sp701_pwr_multi_top
+| Device       : xc7s100fgga676-2
+| Speed File   : -2
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++---------------------------+------------------------------+------------+------------+---------+------+-------+--------+--------+------------+
+|          Instance         |            Module            | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs  | RAMB36 | RAMB18 | DSP Blocks |
++---------------------------+------------------------------+------------+------------+---------+------+-------+--------+--------+------------+
+| sp701_pwr_multi_top       |                        (top) |      16451 |      16451 |       0 |    0 | 14591 |      0 |      0 |          0 |
+|   (sp701_pwr_multi_top)   |                        (top) |          5 |          5 |       0 |    0 |     6 |      0 |      0 |          0 |
+|   u_multi                 |                 sha256_multi |      16447 |      16447 |       0 |    0 | 14585 |      0 |      0 |          0 |
+|     (u_multi)             |                 sha256_multi |        598 |        598 |       0 |    0 |   257 |      0 |      0 |          0 |
+|     g_core[0].u_bench     |                 sha256_bench |       1971 |       1971 |       0 |    0 |  1848 |      0 |      0 |          0 |
+|       (g_core[0].u_bench) |                 sha256_bench |        197 |        197 |       0 |    0 |   791 |      0 |      0 |          0 |
+|       u_core              |                sha256_core_6 |       1775 |       1775 |       0 |    0 |  1057 |      0 |      0 |          0 |
+|     g_core[1].u_bench     | sha256_bench__parameterized0 |       1970 |       1970 |       0 |    0 |  1784 |      0 |      0 |          0 |
+|       (g_core[1].u_bench) | sha256_bench__parameterized0 |        195 |        195 |       0 |    0 |   727 |      0 |      0 |          0 |
+|       u_core              |                sha256_core_5 |       1775 |       1775 |       0 |    0 |  1057 |      0 |      0 |          0 |
+|     g_core[2].u_bench     | sha256_bench__parameterized1 |       1985 |       1985 |       0 |    0 |  1783 |      0 |      0 |          0 |
+|       (g_core[2].u_bench) | sha256_bench__parameterized1 |        195 |        195 |       0 |    0 |   726 |      0 |      0 |          0 |
+|       u_core              |                sha256_core_4 |       1790 |       1790 |       0 |    0 |  1057 |      0 |      0 |          0 |
+|     g_core[3].u_bench     | sha256_bench__parameterized2 |       1985 |       1985 |       0 |    0 |  1783 |      0 |      0 |          0 |
+|       (g_core[3].u_bench) | sha256_bench__parameterized2 |        195 |        195 |       0 |    0 |   726 |      0 |      0 |          0 |
+|       u_core              |                sha256_core_3 |       1790 |       1790 |       0 |    0 |  1057 |      0 |      0 |          0 |
+|     g_core[4].u_bench     | sha256_bench__parameterized3 |       1985 |       1985 |       0 |    0 |  1783 |      0 |      0 |          0 |
+|       (g_core[4].u_bench) | sha256_bench__parameterized3 |        195 |        195 |       0 |    0 |   726 |      0 |      0 |          0 |
+|       u_core              |                sha256_core_2 |       1790 |       1790 |       0 |    0 |  1057 |      0 |      0 |          0 |
+|     g_core[5].u_bench     | sha256_bench__parameterized4 |       1985 |       1985 |       0 |    0 |  1783 |      0 |      0 |          0 |
+|       (g_core[5].u_bench) | sha256_bench__parameterized4 |        195 |        195 |       0 |    0 |   726 |      0 |      0 |          0 |
+|       u_core              |                sha256_core_1 |       1790 |       1790 |       0 |    0 |  1057 |      0 |      0 |          0 |
+|     g_core[6].u_bench     | sha256_bench__parameterized5 |       1984 |       1984 |       0 |    0 |  1782 |      0 |      0 |          0 |
+|       (g_core[6].u_bench) | sha256_bench__parameterized5 |        194 |        194 |       0 |    0 |   725 |      0 |      0 |          0 |
+|       u_core              |                sha256_core_0 |       1790 |       1790 |       0 |    0 |  1057 |      0 |      0 |          0 |
+|     g_core[7].u_bench     | sha256_bench__parameterized6 |       1984 |       1984 |       0 |    0 |  1782 |      0 |      0 |          0 |
+|       (g_core[7].u_bench) | sha256_bench__parameterized6 |        194 |        194 |       0 |    0 |   725 |      0 |      0 |          0 |
+|       u_core              |                  sha256_core |       1790 |       1790 |       0 |    0 |  1057 |      0 |      0 |          0 |
++---------------------------+------------------------------+------------+------------+---------+------+-------+--------+--------+------------+
+* Note: The sum of lower-level cells may be larger than their parent cells total, due to cross-hierarchy LUT combining
+
+

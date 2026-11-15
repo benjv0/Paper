@@ -1,0 +1,50 @@
+============================================================================
+ FPGA SHA-256 (SP701, xc7s100)  -  Indice de archivos           13-nov-2026
+============================================================================
+
+Paper/
+  IEEE_es.pdf               version actual del articulo
+  fpga_secciones.tex        tablas y textos FPGA (version 1 nucleo; se
+                            actualizara con el escalado multinucleo)
+
+RTL/                        DISENO VIGENTE (multinucleo)
+  sha_256.v                 nucleo SHA-256 (sin cambios desde el inicio)
+  sha256_bench.v            banco con parametro CORE_ID
+  sha256_multi.v            N bancos en paralelo + XOR de digests
+  sp701_multi_top.v         top con VIO (placa)        -> proyecto SHA-256
+  sp701_pwr_multi_top.v     top sin VIO (SAIF)         -> proyecto sha-256-pwr
+  sp701.xdc                 restricciones (1 LED), usadas por ambos tops
+  diseno_1_nucleo/          tops y XDC del diseno de 1 nucleo (historico)
+  * sha_256.v y sp701.xdc son las copias que enviaste al chat el 11-nov.
+
+Testbench/                  simulaciones (nucleo, banco, multinucleo, SAIF)
+Scripts/                    vio_runs.tcl, analyze_multi.py, check_run.py,
+                            verify_model.py, analyze_runs.py, LEEME
+
+N=1/   vio_runs_N1.csv, analisis_N1.txt   (5 corridas en placa, OK)
+       power_saif/vectorless_N1_top1nucleo.txt  (top de 1 nucleo, sin envoltorio multi)
+       diseno_inicial/  reportes del primer diseno (10-nov, top de Gemini)
+N=4/   power_saif_N4.txt                  (SAIF, u_multi = 0.139 W)
+       !! Este archivo estaba en Descargas con el nombre power_saif_N8.txt
+          (guardado el 13-nov 15:50 con N_CORES = 4, 8418 LUT). Se renombro.
+N=8/   vio_runs_N8.csv, analisis_N8.txt, util_N8, timing_N8
+       power_saif_N8.txt                  (SAIF real, u_multi = 0.298 W)
+       !! Restaurado desde la copia enviada al chat el 12-nov (el de
+          Descargas fue sobrescrito por el de N = 4).
+N=16/  vio_runs_N16.csv, analisis_N16.txt, power_vectorless_N16.txt
+       util_N16.txt, timing_N16.txt
+       !! Restaurados desde las copias enviadas al chat (en Descargas se
+          habian sobrescrito con los de N = 24).
+N=24/  vio_runs_N24.csv, analisis_N24.txt, power_vectorless_N24, util, timing
+
+----------------------------------------------------------------------------
+ Estado (actualizado 13-nov-2026 17:10)
+----------------------------------------------------------------------------
+  N    Placa (5x60 s)   SAIF            Vectorless   Diseno sin VIO (util/timing)
+  1    OK               OK 0.035 W      OK 0.024 W   OK  (WNS 1.524 ns)
+  4    OK               OK 0.139 W      OK 0.101 W   OK  (WNS 0.922 ns)
+  8    OK               OK 0.298 W      OK 0.195 W   OK  (WNS 0.845 ns)
+  16   OK               licencia (no)   OK 0.391 W   -
+  24   OK               licencia (no)   OK 0.580 W   -
+  Resultados consolidados y metodo de extrapolacion: resumen_escalado.csv
+  Experimentos: TODOS COMPLETOS (13-nov-2026 19:55).

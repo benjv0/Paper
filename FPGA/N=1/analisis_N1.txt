@@ -1,0 +1,21 @@
+run   segundos     mensajes        ciclos   ciclos/msg  f_est[MHz]  Mhash/s(PC)
+  1    60.046     44140995    6003175320    136.0000     99.976      0.7351
+  2    60.041     44138837    6002881832    136.0000     99.980      0.7351
+  3    60.040     44134293    6002263848    136.0000     99.971      0.7351
+  4    60.032     44129317    6001587112    136.0000     99.973      0.7351
+  5    60.038     44137209    6002660424    136.0000     99.981      0.7352
+[OK] corrida 1: digest tras 46360894 mensajes coincide con hashlib
+[OK] corrida 2: digest tras 92714545 mensajes coincide con hashlib
+[OK] corrida 3: digest tras 139068978 mensajes coincide con hashlib
+[OK] corrida 4: digest tras 185419914 mensajes coincide con hashlib
+[OK] corrida 5: digest tras 231780159 mensajes coincide con hashlib
+
+=== Resumen (5 corridas) ===
+Ciclos por mensaje             : 136 (exacto, contado por la FPGA)
+Frecuencia estimada (PC)       : 99.9762 +/- 0.0042 MHz   (nominal 100.000)
+Mhash/s medido con reloj del PC: 0.7351 +/- 0.0000
+Mhash/s a 100 MHz (ciclos)      : 0.7353
+GB/s utiles a 100 MHz (64 B)    : 0.04706
+Mbps por bloque (banco, 68 c)  : 752.94
+
+RESULTADO: TODO OK

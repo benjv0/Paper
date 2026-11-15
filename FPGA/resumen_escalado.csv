@@ -1,0 +1,11 @@
+N,GB_s,Mhash_s,speedup,LUT_u_multi_placa,LUT_pct,WNS_ns_placa,Pdyn_W,Pdyn_metodo,Pdyn_min_W,Pdyn_max_W,P_chip_W,J_GB_neto,J_GB_bruto,J_GB_bruto_min,J_GB_bruto_max,verificacion
+1,0.04706,0.7353,1,1948,3.0,1.468,0.035,SAIF,0.035,0.035,0.125,0.744,2.656,2.656,2.656,231.8e6 hashes OK
+4,0.18824,2.9412,4,8127,12.7,1.285,0.139,SAIF,0.139,0.139,0.229,0.738,1.217,1.217,1.217,927.2e6 hashes OK
+8,0.37647,5.8824,8,16368,25.6,0.574,0.298,SAIF,0.298,0.298,0.388,0.792,1.031,1.031,1.031,1854.6e6 hashes OK
+16,0.75294,11.7647,16,32467,50.7,0.652,0.583,extrapolado,0.569,0.598,0.673,0.774,0.894,0.875,0.913,3716.9e6 hashes OK
+24,1.12941,17.6471,24,48837,76.3,0.535,0.871,extrapolado,0.843,0.899,0.961,0.771,0.851,0.827,0.875,5562.8e6 hashes OK
+# Throughput medido en placa en los 5 N (136 ciclos/mensaje/nucleo, 100 MHz, 5 corridas de 60 s).
+# Potencia estatica del chip: 0.090 W (rieles internos; se excluye el banco de I/O del LED).
+# N=16 y 24: promedio de (a) recta SAIF N=1,4,8: P = -0.0060 + 0.03769 N (R2 = 0.9986) y
+#   (b) vectorless x razon media SAIF/vectorless 1.454 +/- 0.076 (N=1,4,8). Min/max incluyen la razon de N=8.
+# Vectorless por N (u_multi): 0.024, 0.101, 0.195, 0.391, 0.580 W -> recta R2 = 0.99990.

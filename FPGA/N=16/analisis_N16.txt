@@ -1,0 +1,23 @@
+py analyze_multi.py vio_runs_N16.csv --cores 16   (salida copiada del chat, 13-nov-2026)
+Diseno de 16 nucleos, 5 corridas
+run  segundos   msg/nucleo   msg totales        ciclos  ciclos/msg  f_est[MHz]  GB/s(PC)
+  1    60.110     44156993     706511888    6005351048    136.0000     99.906     0.7522
+  2    60.181     44186191     706979056    6009321976    136.0000     99.854     0.7518
+  3    60.194     44198491     707175856    6010994776    136.0000     99.860     0.7519
+  4    60.210     44199229     707187664    6011095144    136.0000     99.835     0.7517
+  5    60.256     44237345     707797520    6016278920    136.0000     99.845     0.7518
+Verificando 16 cadenas (3716940800 hashes en total) con 12 procesos... (3348 s)
+[OK] corrida 1: XOR de 16 digests tras 46379297 mensajes/nucleo coincide
+[OK] corrida 2: XOR de 16 digests tras 92833431 mensajes/nucleo coincide
+[OK] corrida 3: XOR de 16 digests tras 139309472 mensajes/nucleo coincide
+[OK] corrida 4: XOR de 16 digests tras 185795191 mensajes/nucleo coincide
+[OK] corrida 5: XOR de 16 digests tras 232308800 mensajes/nucleo coincide
+=== Resumen (N = 16, 5 corridas) ===
+Ciclos por mensaje (por nucleo) : 136 (exacto, contado por la FPGA)
+Frecuencia estimada (PC)        : 99.860 +/- 0.027 MHz
+GB/s medidos con reloj del PC   : 0.7519 +/- 0.0002
+Mhash/s totales a 100 MHz       : 11.7647
+GB/s utiles totales a 100 MHz   : 0.75294
+Mbps por bloque totales (banco) : 12047.06
+RESULTADO: TODO OK
+(Potencia: SAIF no posible por limite de licencia de XSim; ver power_vectorless_N16.txt)

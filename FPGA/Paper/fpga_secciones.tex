@@ -1,0 +1,224 @@
+% ============================================================================
+% fpga_secciones.tex  -  Texto y tablas FPGA para el artículo
+% Valores: 5 corridas de 60 s en la SP701 (12-nov-2026), potencia Vivado+SAIF.
+% Pegar cada bloque en su lugar. Requiere UTF-8 (acentos directos).
+% ============================================================================
+
+
+% ----------------------------------------------------------------------------
+% 1) RESUMEN: reemplazar "La caracterización final en FPGA permanece
+%    pendiente (TODO)." por:
+% ----------------------------------------------------------------------------
+En FPGA, un núcleo iterativo RTL validado en hardware procesa 0.047~GB/s a
+100~MHz con 1\,751~LUT y 38~mW dinámicos estimados, logrando la menor
+energía dinámica neta por byte (0.81~J/GB) a costa de un throughput dos
+órdenes de magnitud inferior.
+
+% Sugerencia en la misma frase anterior del resumen: cambiar
+%   "la CPU heterogénea alcanza la mayor eficiencia energética del sistema completo"
+% por
+%   "la CPU heterogénea alcanza la mayor eficiencia energética de sistema completo
+%    entre las plataformas con telemetría física"
+
+
+% ----------------------------------------------------------------------------
+% 2) III-A: agregar al final de la sección
+% ----------------------------------------------------------------------------
+\textit{Adaptación del workload en FPGA:} dado que la BRAM del dispositivo
+xc7s100 ($\approx$540~KiB) no puede alojar el archivo de 1~GiB ni el arreglo
+de 512~MiB de digests, en FPGA los mensajes se generan en el chip. Cada
+mensaje de $C = 64$~B ($B = 2$) se forma con un contador de 64~bits, su
+complemento y el digest del mensaje anterior, de modo que cada hash depende
+del precedente; el segundo bloque contiene el relleno FIPS~180-4, igual que
+en CPU y GPU. Esta modalidad equivale al régimen \textit{kernel-only} de la
+GPU, sin transferencia por un bus externo. La correctitud se valida con el
+vector NIST ``abc'' ejecutado en silicio tras cada reset y recomputando en el
+anfitrión, con \texttt{hashlib.sha256}, la cadena completa de mensajes, cuyo
+digest final debe coincidir bit a bit con el de la FPGA.
+
+
+% ----------------------------------------------------------------------------
+% 3) III-B: agregar al final de la sección
+% ----------------------------------------------------------------------------
+En FPGA, el diseño opera a 100~MHz, obtenidos dividiendo por dos el reloj
+diferencial de 200~MHz de la placa. Un núcleo \textit{Virtual I/O} (VIO)
+controla el inicio y la parada del banco de prueba y expone el número de
+mensajes completados, los ciclos activos y el último digest. Un script Tcl en
+el \textit{Hardware Manager} de Vivado aplica el mismo protocolo que en CPU y
+GPU (3~s de calentamiento y 5~corridas, aquí de 60~s), cronometradas con el
+reloj del anfitrión. El throughput (Ec.~3) se calcula con los ciclos contados
+en hardware, y el reloj del anfitrión se usa para verificar la frecuencia.
+La potencia se estima con \texttt{report\_power} de Vivado~2026.1 sobre el
+diseño post-ruteo sin núcleos de depuración, con actividad de conmutación
+obtenida de una simulación funcional post-implementación de 1~ms en régimen
+continuo (SAIF; 58\,\% de las nets anotadas y el resto por propagación
+probabilística; confianza \textit{High}). Como aproximación a la Ec.~4, la
+energía neta usa la potencia dinámica del bloque evaluado y la energía bruta
+suma la potencia estática del dispositivo (0.089~W).
+
+
+% ----------------------------------------------------------------------------
+% 4) III-E: agregar como limitación (9) al final de la lista
+% ----------------------------------------------------------------------------
+y (9) en FPGA la potencia es una estimación del modelo de Vivado con
+actividad simulada y no una medición física como RAPL o NVML, y abarca solo
+el chip (NVML incluye además la memoria y la placa de la GPU); asimismo, el
+workload se genera en el chip y no incluye transferencias desde el
+anfitrión, por lo que la FPGA se compara con el régimen \textit{kernel-only}
+de la GPU y no con las mediciones E2E.
+
+
+% ----------------------------------------------------------------------------
+% 5) III-F. Diseño de Microarquitectura RTL  (texto de la sección vacía)
+% ----------------------------------------------------------------------------
+El núcleo (\texttt{sha256\_core}) implementa una arquitectura iterativa de
+una ronda por ciclo (\textit{loop rolling} [6]). Una máquina de estados de
+tres fases carga el bloque de 512~bits y las variables $a$--$h$ (1~ciclo),
+ejecuta las 64~rondas (64~ciclos) y suma el estado intermedio
+$H^{(i)} = H^{(i-1)} + \{a,\dots,h\}$ (1~ciclo), totalizando 66~ciclos por
+bloque. Las constantes $K_t$ se implementan como una ROM en LUT, y el
+encadenamiento de $H^{(i)}$ permite procesar mensajes de $B \geq 2$ bloques.
+Un banco de prueba en el chip (\texttt{sha256\_bench}) alimenta el núcleo con
+mensajes de $C = 64$~B y añade 2~ciclos de intercambio (\textit{handshake})
+por bloque, por lo que la latencia medida es de 68~ciclos por bloque y 136
+por mensaje.
+
+
+% ----------------------------------------------------------------------------
+% 6) III-G. Optimizaciones de Ruta de Datos y Ruta de Control
+% ----------------------------------------------------------------------------
+La expansión de mensajes usa una ventana deslizante de 16~palabras
+($W[0..15]$, 512~FF) en lugar de almacenar las 64~palabras $W_t$ (2\,048~FF),
+técnica estándar [6] análoga a la ventana \texttt{w[16]} del kernel GPU~v2.
+En cada ronda, la nueva palabra
+$W_{t+16} = \sigma_1(W_{t+14}) + W_{t+9} + \sigma_0(W_{t+1}) + W_t$ se
+calcula en paralelo y fuera del camino crítico del compresor, que queda
+determinado por la suma $T_1 + T_2$. La síntesis mapea los sumadores sobre
+cadenas de acarreo CARRY4 y no utiliza bloques DSP ni BRAM; además, Vivado
+recodificó la máquina de estados en \textit{one-hot} y replicó sus registros
+por \textit{fanout}, lo que añade 20~FF a los 1\,034~FF del RTL. No se
+aplicaron técnicas de reducción del camino crítico, como el precómputo de
+$h + K_t + W_t$ [8], el reordenamiento espacial o el
+\textit{quasi-pipelining} [6]; su incorporación queda como trabajo futuro.
+
+
+% ----------------------------------------------------------------------------
+% 7) TABLA IV: reemplazar la fila "FPGA (Spartan-7) TODO" por:
+% ----------------------------------------------------------------------------
+FPGA Spartan-7 (1 núcleo)$^{b}$ & 0.0471 $\pm$ 0.0000 & 0.7353 $\pm$ 0.0000
+  & 0.81$^{c}$ & --- & 0.013$\times^{b}$ \\
+
+% Notas a agregar bajo la Tabla IV:
+% $^{b}$ Régimen en chip, comparable con GPU~v2 kernel y no con E2E.
+%   Throughput calculado con los ciclos contados en hardware a 100~MHz
+%   (variación entre corridas $<0.01$\,\%).
+% $^{c}$ Potencia dinámica estimada (Vivado, SAIF) del banco completo
+%   (0.038~W); núcleo solo: 0.72~J/GB. Incluyendo la potencia estática del
+%   dispositivo (0.089~W): 2.70~J/GB. Sin anfitrión activo durante la medición.
+
+
+% ----------------------------------------------------------------------------
+% 8) TABLA V: reemplazar la tabla completa
+% ----------------------------------------------------------------------------
+\begin{table}[!t]
+\caption{Resultados del acelerador RTL SHA-256 en FPGA (AMD Spartan-7)}
+\label{tab:fpga}
+\centering
+\footnotesize
+\begin{tabular}{@{}ll@{}}
+\toprule
+Parámetro & Valor \\
+\midrule
+Dispositivo / placa              & xc7s100fgga676-2 / SP701 \\
+HDL / arquitectura               & Verilog RTL / 1 ronda por ciclo \\
+Frecuencia de operación          & 100~MHz \\
+$f_{\text{máx}}$ estimada (STA)$^{a}$ & $\geq$117.2~MHz ($\geq$121.3 sin VIO) \\
+Ciclos / bloque                  & 66 (núcleo) / 68 (banco, medido) \\
+Ciclos / mensaje de 64~B         & 136 (medido) \\
+Mbps por bloque                  & 775.76 (núcleo) / 752.94 (banco) \\
+Throughput útil ($C = 64$~B)     & 0.0471~GB/s (0.7353~Mhash/s) \\
+LUT                              & 1\,751 / 64\,000 (2.74\,\%) \\
+FF$^{b}$                         & 1\,054 / 128\,000 (0.82\,\%) \\
+BRAM / DSP                       & 0 / 0 \\
+Eficiencia de área               & 0.443~Mbps/LUT \\
+Potencia dinámica (SAIF)$^{c}$   & 0.034 (núcleo) / 0.038~W (banco) \\
+Potencia estática (chip)         & 0.089~W \\
+Energía neta                     & 0.72 (núcleo) / 0.81~J/GB (banco) \\
+Energía bruta                    & 2.61 (núcleo) / 2.70~J/GB (banco) \\
+Speedup vs.\ CPU SHA-NI 4T       & 0.013$\times$ \\
+\bottomrule
+\multicolumn{2}{@{}p{0.95\columnwidth}@{}}{\scriptsize
+$^{a}$ Holgura positiva con restricción de 10~ns (WNS = 1.468~ns con VIO,
+1.759~ns sin VIO); cota inferior, sin barrido de restricción.
+$^{b}$ 1\,034~FF del RTL más 20 añadidos por síntesis (FSM \textit{one-hot}
+replicada). $^{c}$ Estimación post-ruteo con actividad de simulación
+post-implementación (confianza \textit{High}). Recursos del núcleo sin la
+infraestructura de depuración (VIO y \textit{dbg\_hub}).}
+\end{tabular}
+\end{table}
+
+% Si la plantilla no carga booktabs, cambiar \toprule, \midrule y \bottomrule
+% por \hline.
+
+
+% ----------------------------------------------------------------------------
+% 9) IV-D. Resultados de FPGA: reemplazar el texto actual (incluido el
+%    párrafo "La implementación FPGA se enfoca en maximizar...")
+% ----------------------------------------------------------------------------
+La Tabla~\ref{tab:fpga} resume los resultados post-implementación y en
+hardware del acelerador sobre la placa SP701. En 5~corridas de 60~s a
+100~MHz, el banco completó $44.14 \pm 0.005$~millones de mensajes por
+corrida ($\approx$2.8~GB útiles) con exactamente 136~ciclos por mensaje en
+todas ellas. El digest final de cada corrida coincidió bit a bit con la
+cadena recomputada con \texttt{hashlib.sha256} (231.8~millones de mensajes
+encadenados en total), y el autotest NIST pasó en silicio. Esto equivale a
+0.7353~Mhash/s y 0.0471~GB/s útiles (752.94~Mbps por bloque). La frecuencia
+estimada con el reloj del anfitrión fue $99.976 \pm 0.004$~MHz; la diferencia
+de 0.02\,\% respecto del valor nominal corresponde a la latencia JTAG de los
+comandos de inicio y parada (11--17~ms por corrida). El diseño cumple las
+restricciones de temporización con una holgura de 1.468~ns sobre 10~ns
+(1.759~ns sin núcleos de depuración), lo que indica una $f_{\text{máx}}$ de
+al menos 117~MHz.
+
+Excluyendo la infraestructura de depuración (VIO y \textit{dbg\_hub}:
+1\,659~LUT y 2\,936~FF), el núcleo ocupa 1\,751~LUT (2.74\,\%) y 1\,054~FF
+(0.82\,\%), sin DSP ni BRAM, con una eficiencia de área de 0.443~Mbps/LUT.
+Con actividad de simulación (SAIF), la potencia dinámica estimada es de
+34~mW para el núcleo y 38~mW para el banco completo, más del doble de la
+estimación sin simulación (16 y 22~mW), lo que indica que el modo
+\textit{vectorless} subestima la conmutación de SHA-256. Esto resulta en
+0.72~J/GB netos para el núcleo y 0.81~J/GB para el banco, por debajo de la
+GPU~v2 kernel-only (1.62~J/GB) y de la CPU con 12~CPUs (P+E) (2.53~J/GB).
+Al sumar la potencia estática del dispositivo (0.089~W), la energía bruta
+del banco es de 2.70~J/GB: inferior a la de la CPU ($\approx$3.41~J/GB con
+su potencia de reposo) pero superior a la de la GPU~v2 kernel-only
+($\approx$1.90~J/GB), porque con un solo núcleo la potencia estática
+representa el 70\,\% del total del chip. Con 0.127~W en el chip, la FPGA
+opera dos órdenes de magnitud por debajo de la CPU (20~W) y la GPU, a costa
+de un throughput 124~veces menor que la mejor configuración de CPU.
+
+
+% ----------------------------------------------------------------------------
+% 10) IV-C: en la última frase del punto "Eficiencia energética de
+%     dispositivo vs. sistema completo", cambiar
+%     "consolidando a la CPU heterogénea como la arquitectura más eficiente"
+%     por
+%     "consolidando a la CPU heterogénea como la arquitectura más eficiente
+%      entre CPU y GPU"
+% ----------------------------------------------------------------------------
+
+
+% ----------------------------------------------------------------------------
+% 11) V. CONCLUSIONES: reemplazar desde "Como trabajo futuro, la
+%     caracterización final del acelerador RTL..." hasta el final por:
+% ----------------------------------------------------------------------------
+La caracterización en FPGA completa la comparativa de tres vías: un núcleo
+iterativo RTL en Spartan-7, validado en hardware sobre 231.8~millones de
+mensajes encadenados, procesa 0.047~GB/s a 100~MHz con 1\,751~LUT y
+0.127~W en el chip. Alcanza la menor energía dinámica neta estimada
+(0.81~J/GB), pero su throughput es dos órdenes de magnitud inferior al de
+CPU y GPU, y su energía bruta (2.70~J/GB) está dominada por la potencia
+estática del dispositivo. Como trabajo futuro se plantea replicar el núcleo
+y acortar su camino crítico para amortizar la potencia estática, medir la
+potencia directamente en la placa y evaluar la FPGA de extremo a extremo con
+una interfaz de alta velocidad.

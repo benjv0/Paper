@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+  \caption{Escalado multinúcleo del acelerador SHA-256 en FPGA (SP701, xc7s100fgga676-2, 100~MHz, $C=64$~B)}
+  \label{tab:fpga}
+  \centering
+  \setlength{\tabcolsep}{3pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccccc}
+    \toprule
+    \textbf{$N$} & \textbf{GB/s$^a$} & \textbf{Mhash/s} & \textbf{LUT (\%)$^b$} & \textbf{WNS (ns)$^b$} & \textbf{$P_\text{din}$ (W)$^c$} & \textbf{J/GB neto$^c$} & \textbf{J/GB bruto$^c$} \\
+    \midrule
+     1 & 0.047 &  0.735 &  2\,037 (3.2)  & 1.524 & 0.035 & 0.74 & 2.66 \\
+     4 & 0.188 &  2.941 &  8\,127 (12.7) & 1.285 & 0.139 & 0.74 & 1.22 \\
+     8 & 0.376 &  5.882 & 16\,368 (25.6) & 0.574 & 0.298 & 0.79 & 1.03 \\
+    16 & 0.753 & 11.765 & 32\,467 (50.7) & 0.652 & 0.583$^{d}$ (0.569--0.598) & 0.77 (0.76--0.79) & 0.89 (0.88--0.91) \\
+    24 & 1.129 & 17.647 & 48\,837 (76.3) & 0.535 & 0.871$^{d}$ (0.843--0.899) & 0.77 (0.75--0.80) & 0.85 (0.83--0.88) \\
+    \bottomrule
+  \end{tabular}%
+  }
+  \par\vspace{2pt}
+  \begin{minipage}{\columnwidth}\footnotesize\raggedright
+  $^a$Throughput útil calculado con los ciclos contados en hardware (136 por mensaje y núcleo, exacto en las 25~corridas de 60~s); la variación entre corridas medida con el reloj del anfitrión es $<0.03$\,\%. Speedup respecto de CPU SHA-NI 4T: $0.013\times$ ($N=1$) a $0.32\times$ ($N=24$).
+  $^b$LUT del bloque multinúcleo ($N$ bancos con su núcleo y el árbol XOR) sobre 64\,000 disponibles, sin la infraestructura de depuración (núcleo VIO y su concentrador JTAG); holgura de setup con restricción de 10~ns. Para $N=1$ se usa la implementación del mismo envoltorio sin VIO; los demás $N$ son los diseños programados en la placa.
+  $^c$Estimación del análisis de potencia de Vivado sobre el diseño ruteado (no es una medición física). Neto: solo potencia dinámica del bloque; bruto: suma la estática del chip (0.090~W). $^{d}$Extrapolado (sin SAIF por el límite de licencia de XSim): promedio de la recta SAIF sobre $N=1,4,8$ y del \textit{vectorless} calibrado; entre paréntesis, el rango de ambos métodos.
+  \end{minipage}
+\end{table}

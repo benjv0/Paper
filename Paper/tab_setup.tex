@@ -1,0 +1,26 @@
+\begin{table}[htbp]
+  \caption{Plataforma experimental}
+  \label{tab:setup}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{2.6pt}
+  \begin{tabular}{@{}llll@{}}
+    \toprule
+     & \textbf{CPU} & \textbf{GPU} & \textbf{FPGA} \\
+    \midrule
+    Dispositivo & i7-1255U & RTX 2050 móvil & Spartan-7 \\
+    Arquitectura & Alder Lake & Ampere GA107M & xc7s100, SP701 \\
+    Cómputo & 2P+8E, 12 hilos & 16 SM, 2\,048 núcl. & 64\,000 LUT \\
+    Memoria & 16~GB DDR4 & 4~GB GDDR6 & 540~KiB BRAM \\
+    Potencia nom. & 15~W (límite 20~W) & 30~W & --- \\
+    Frecuencia & variable & variable & 100~MHz fija \\
+    Enlace & --- & PCIe 4.0 $\times$4 & JTAG \\
+    Herramientas & GCC 15.2, -O3 & CUDA 12.4, -O3 & Vivado 2026.1 \\
+    Potencia med. & RAPL (paquete) & NVML (tarjeta) & Vivado (estim.) \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{2pt}
+  \begin{minipage}{\columnwidth}\footnotesize\raggedright
+  CPU y GPU comparten el mismo equipo portátil (Ubuntu 26.04 LTS, núcleo Linux 7.0, controlador NVIDIA 595.99.02). La FPGA se controla por JTAG desde un PC con Vivado, que no participa en el cómputo.
+  \end{minipage}
+\end{table}

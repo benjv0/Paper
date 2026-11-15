@@ -1,0 +1,34 @@
+\begin{table*}[!t]
+  \caption{Implementaciones de SHA-256 en FPGA citadas en este trabajo frente al núcleo iterativo evaluado (valores tomados del texto original de cada fuente; --- = no reportado)}
+  \label{tab:fpga_lit}
+  \centering
+  \setlength{\tabcolsep}{4pt}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llllccll}
+    \toprule
+    \textbf{Trabajo} & \textbf{Arquitectura} & \textbf{Dispositivo} & \textbf{$f$ (MHz)} & \textbf{Throughput$^a$} & \textbf{Mbps/LUT} & \textbf{Área} & \textbf{Potencia} \\
+    \midrule
+    Chaves et al.~\cite{chaves2006, r3} & iterativo, reprogramación de operaciones & Virtex-II Pro XC2VP30-7 & 174 & 1.37~Gbps (1.83~Mbps/slice) & --- & 755 slices + 1 BRAM & --- \\
+    Michail et al.~\cite{michail2009} & desenrollado parcial $\times$2, segmentado & Virtex-II & 52.1$^{b}$ & 3.10~Gbps$^{b}$ & --- & 1\,708 CLB & --- \\
+    Li et al.~\cite{r2} & pipeline completo, 64 etapas & Virtex-7 xc7vx690t & 429 & 219.65~Gbps (24.84~Mbps/slice) & --- & 8\,842 slices & --- \\
+    Pham et al.~\cite{pham2020double} & doble SHA-256 desenrollado & Zynq US+ ZCU102 & 374.2 & 383.18~Gbps$^{c}$ & 8.32 & 46\,013 LUT & 2.49~W (a 333~MHz) \\
+    Pham et al.~\cite{r1} & multimodo SHA-2, SoC completo & Alveo U280 & 250 & 99.7~Mhash/s & --- & 285\,754 LUT & 6.57~W \\
+    Martino y Cilardo~\cite{martino_iot2020} & iterativo configurable (\textit{Naive}, UF1) & Kintex US+ XCKU5P & 417$^{d}$ & 6.52~Mhash/s ($\approx$3.34~Gbps)$^{d}$ & 2.11$^{d}$ & 1\,578 LUT & 0.122~W din. (0.573 total) \\
+    Liu et al.~\cite{liu2019energy} & SHA-256 segmentado (contraseñas) & Zynq XC7Z030-3 & 190 & 189~M SHA-256/s por núcleo & --- & --- & 12.95~W medidos$^{g}$ \\
+    Kammoun et al.~\cite{kammoun2020} & HLS, bucles desenrollados & Zynq XC7Z020 & 181 & 917~Mbps & --- & 6\,367 slices & --- \\
+    Gad et al.~\cite{gad2020low} & iterativo, 67 ciclos/bloque & Virtex-7 xc7v2000t & 83.33 & 0.637~Gbps (2.32~Mbps/slice) & 0.83 & 275 slices, 763 LUT & 13~mW (dinámica)$^{h}$ \\
+    Phan et al.~\cite{phan2021multicore} & ALU paralela 5 etapas; 8 PE & Zynq-7000 (1 PE) & 241.8 & 1.35~Gbps (1 PE) & 0.42 & 3\,203 LUT (1 PE) & --- \\
+    Tran et al.~\cite{tran2021bca} & 64 núcleos de doble SHA-256 & Alveo U280 & 400 & $\approx$359~Mhash/s dobles$^{i}$ & --- & 18\,\% de las LUT & 8.38~W (dinámica) \\
+    Kieu-Do-Nguyen et al.~\cite{r4} & iterativo, bajo consumo & Artix-7 / Spartan-7 xc7s50 & 139.0 / 123.8 & 1.04~Gbps$^{e}$ & 0.79 & 1\,310 LUT, 327 slices & 0.072~W (conf. mínima) \\
+    Pham et al.~\cite{pham2026cryptorv} & coprocesador RISC-V multialgoritmo & Zynq US+ ZCU102 & 160 & $\approx$0.56~Gbps$^{f}$ & --- & 34\,704 LUT (total) & 0.851~W (dinámica) \\
+    \midrule
+    Este trabajo, $N=1$ & iterativo, 1 ronda/ciclo, $W[16]$ & Spartan-7 xc7s100 & 100 & 0.753~Gbps & 0.37 & 2\,037 LUT & 0.035~W (din., SAIF) \\
+    Este trabajo, $N=24$ & 24 núcleos iterativos en paralelo & Spartan-7 xc7s100 & 100 & 18.07~Gbps & 0.37 & 48\,837 LUT & 0.871~W (din., extrap.) \\
+    \bottomrule
+  \end{tabular}%
+  }
+  \par\vspace{3pt}
+  \begin{minipage}{\textwidth}\footnotesize\raggedright
+  $^a$Throughput de bloque (512~bits por bloque de compresión), convención habitual de la literatura; para este trabajo equivale a $N \times 512~\text{bits} \times 100~\text{MHz}/68$~ciclos, el doble del throughput útil de la Tabla~\ref{tab:fpga} (relleno incluido). Las filas no son directamente comparables: difieren la familia y el nodo tecnológico, la inclusión del relleno, la carga (un bloque largo frente a mensajes cortos encadenados), la herramienta y el modo de estimación de potencia. $^{b}$Frecuencia post-síntesis y throughput post-ruteo, tal como los reporta la fuente. $^{c}$La fuente cuenta 1\,024~bits por hash doble, con un hash por ciclo; verificado en placa a 333~MHz (340.99~Gbps). $^{d}$Frecuencia derivada del retardo de camino crítico reportado (2.398~ns); throughput y Mbps/LUT calculados con 512~bits por hash (la fuente reporta 1.057~Mbps/LUT contando 256~bits). $^{e}$A 139~MHz en Artix-7; la fuente mide 751~Mbps en placa (Cyclone~V) a 100~MHz. $^{f}$Derivado de los 146~ciclos por mensaje de 64~B a 160~MHz reportados; el coprocesador integra además SHA-512, SM3, SHA-3 y AES. $^{g}$Potencia de la placa completa medida en la fuente de 5~V durante la aplicación RAR5 (2~núcleos SHA-256 y el procesador ARM). $^{h}$La fuente la reporta como ``13~mV''; estática: 148~mW. $^{i}$Derivado de los $2^{32}$ hashes dobles calculados en 11.95~s reportados.
+  \end{minipage}
+\end{table*}

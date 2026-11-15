@@ -9,16 +9,22 @@
     \textbf{Plataforma / Config.} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB neto (disp.)} & \textbf{J/GB neto (+host)} & \textbf{Speedup$^a$} \\
     \midrule
     Escalar 1T               & 0.11 $\pm$ 0.00      &   1.71 $\pm$ 0.00 & 45.58 $\pm$ 0.05 & 45.58 $\pm$ 0.05 & 0.03$\times$ \\
+    SHA-NI 1T                & 0.89 $\pm$ 0.00      &  13.90 $\pm$ 0.01 &  5.28 $\pm$ 0.02 &  5.28 $\pm$ 0.02 & 0.25$\times$ \\
     SHA-NI 4T (ref.)         & 3.55 $\pm$ 0.00      &  55.45 $\pm$ 0.01 &  4.13 $\pm$ 0.05 &  4.13 $\pm$ 0.05 & 1.00$\times$ \\
     SHA-NI 8T                & 5.60 $\pm$ 0.02      &  87.45 $\pm$ 0.35 &  2.67 $\pm$ 0.05 &  2.67 $\pm$ 0.05 & 1.58$\times$ \\
     SHA-NI 12 CPUs (P+E)     & 5.84 $\pm$ 0.02      &  91.25 $\pm$ 0.24 &  2.53 $\pm$ 0.02 &  2.53 $\pm$ 0.02 & 1.65$\times$ \\
     GPU v2 kernel            & 15.62 $\pm$ 0.15     & 244.02 $\pm$ 2.38 &  1.62 $\pm$ 0.02 &  2.45 $\pm$ 0.04 & 4.40$\times$ \\
     GPU v2 E2E pinned        & 4.98 $\pm$ 0.02      &  77.86 $\pm$ 0.33 &  3.49 $\pm$ 0.04 &  5.48 $\pm$ 0.07 & 1.40$\times$ \\
     \midrule
-    FPGA (Spartan-7)         & \TODO{}             & \TODO{}          & \TODO{}         & \TODO{}         & \TODO{} \\
+    FPGA Spartan-7, 1 núcleo$^{b}$   & 0.047 $\pm$ 0.000 &  0.735 $\pm$ 0.000 & 0.74$^{c}$ & --- & 0.013$\times$ \\
+    FPGA Spartan-7, 24 núcleos$^{b}$ & 1.129 $\pm$ 0.000 & 17.647 $\pm$ 0.000 & 0.77 (0.75--0.80)$^{c,d}$ & --- & 0.32$\times$ \\
     \bottomrule
-    \multicolumn{6}{l}{\footnotesize $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B). El speedup de GPU v2 kernel (aislado en VRAM) no es comparable con E2E.} \\
-    \multicolumn{6}{l}{\footnotesize J/GB neto (+host) suma la energía RAPL PKG del host durante la ejecución (excluye la DRAM del host).} \\
   \end{tabular}%
   }
+  \par\vspace{2pt}
+  \begin{minipage}{\columnwidth}\footnotesize\raggedright
+  $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B). Los speedups de GPU v2 kernel (aislado en VRAM) y de la FPGA (datos generados en el chip) no son comparables con E2E. En CPU, J/GB neto descuenta un reposo de 5.15~W (RAPL PKG). J/GB neto (+host) suma la energía RAPL PKG del host durante la ejecución (excluye la DRAM del host); la FPGA no tiene anfitrión activo durante la medición (---).
+  $^b$Régimen en chip a 100~MHz, comparable con GPU~v2 kernel y no con E2E; throughput derivado de los ciclos contados en hardware (variación entre corridas $<0.03$\,\%).
+  $^{c}$Potencia dinámica \emph{estimada} por Vivado (SAIF para $N=1$), no medida físicamente; con la estática del chip (0.090~W) la energía bruta es 2.66~J/GB ($N=1$) y 0.85~J/GB ($N=24$). $^{d}$Extrapolado a partir de $N=1,4,8$; entre paréntesis, el rango de los dos métodos de extrapolación.
+  \end{minipage}
 \end{table}

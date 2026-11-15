@@ -1,0 +1,7 @@
+Pendientes
+- Colocar subsection, se ve muy apretado el texto del subtitulo.
+- Reducir tamaño de letra para hacer una tabla mas pequeña. Tabla 1.
+- No usar el formato III-A, solo debe decir la letra.
+- Las tablas deben tener todas las lineas de los bordes de cada celda.
+- La figura 1 tiene los titulos de los grafico desalineados (A  del B).
+- La figura 4 tiene los indicadores de grafica (a) y (b) mal posicionados en la grafica, por que estan sobre las lineas. No coloques las lineas/informacion de GPU Y CPU, en ambos graficos, se ve muy saturado.

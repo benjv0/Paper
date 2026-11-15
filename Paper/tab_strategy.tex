@@ -1,0 +1,22 @@
+\begin{table}[htbp]
+  \caption{Qué parte de SHA-256 se paraleliza u optimiza en cada plataforma}
+  \label{tab:strategy}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}p{1.45cm}p{2.2cm}p{2.2cm}p{2.2cm}@{}}
+    \toprule
+    \textbf{Parte} & \textbf{CPU (SHA-NI)} & \textbf{GPU (v2)} & \textbf{FPGA} \\
+    \midrule
+    Mensajes independientes & \raggedright 1 a 12 hilos; cola de tareas dinámica & \raggedright un hilo CUDA por mensaje; miles a la vez & $N = 1$ a 24 núcleos replicados \\
+    \addlinespace
+    Expansión $W_t$ & \raggedright instrucciones dedicadas: 4 palabras por paso & \raggedright ventana circular de 16 palabras en registros & ventana de 16 palabras; $W_t$ en paralelo a la ronda \\
+    \addlinespace
+    Rondas de compresión & \raggedright 2 rondas por instrucción & \raggedright 64 rondas desenrolladas, sin bucle & 1 ronda por ciclo de reloj \\
+    \addlinespace
+    Constantes $K_t$ & \raggedright tabla en memoria & \raggedright memoria de constantes de la GPU & ROM en LUT \\
+    \addlinespace
+    Entrada y salida & \raggedright RAM del anfitrión & \raggedright PCIe; memoria fijada y 3 flujos solapados & generación en el chip \\
+    \bottomrule
+  \end{tabular}
+\end{table}

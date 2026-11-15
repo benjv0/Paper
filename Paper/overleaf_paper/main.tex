@@ -1,0 +1,521 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+%Template version as of 6/27/2024
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-tabla,es-nodecimaldot]{babel}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{verbatim}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{siunitx}
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{TODO: #1}}}
+% ── Macros consolidadas ──
+% Auto-generated LaTeX macros from results/benchmarks_summary.csv
+\newcommand{\macrocputputscalar}{0.11}
+\newcommand{\macrocpuenergyscalarnet}{45.58}
+\newcommand{\macrocpuenergyscalargross}{92.72}
+\newcommand{\macrocpuenergyscalarpower}{10.1}
+\newcommand{\macrocpuenergyscalarpowers}{10.1~W}
+\newcommand{\macrocputputshani}{0.89}
+\newcommand{\macrocpuenergyshaninet}{5.28}
+\newcommand{\macrocputputtwo}{1.78}
+\newcommand{\macrocpuenergytwonet}{4.47}
+\newcommand{\macrocputputfour}{3.55}
+\newcommand{\macrocpuenergyfournet}{4.13}
+\newcommand{\macrocpuenergyfournets}{4.13~J/GB}
+\newcommand{\macrocpuenergyfourgross}{5.58}
+\newcommand{\macrocpuenergyfourgrosss}{5.58~J/GB}
+\newcommand{\macrocpuenergyfourpower}{19.8}
+\newcommand{\macrocpuenergyfourpowers}{19.8~W}
+\newcommand{\macrocputputeight}{5.60}
+\newcommand{\macrocpuenergyeightnet}{2.67}
+\newcommand{\macrocpuenergyeightpower}{20.1}
+\newcommand{\macrocputputtwelve}{5.62}
+\newcommand{\macrocpuenergytwelvenet}{2.69}
+\newcommand{\macrocpuenergytwelvenets}{2.69~J/GB}
+\newcommand{\macrocpuenergytwelvegross}{3.61}
+\newcommand{\macrocpuenergytwelvegrosss}{3.61~J/GB}
+\newcommand{\macrocpuenergytwelvepower}{20.3}
+\newcommand{\macrocpuenergytwelvepowers}{20.3~W}
+\newcommand{\macrocputputtwelvepe}{5.84}
+\newcommand{\macrocpuenergytwelvepenet}{2.53}
+\newcommand{\macrocpuenergytwelvepenets}{2.53~J/GB}
+\newcommand{\macrogputputkernel}{15.62}
+\newcommand{\macrogpuenergykernelnet}{1.62}
+\newcommand{\macrogpuenergykernelgross}{1.90}
+\newcommand{\macrogpupowerkernel}{29.7}
+\newcommand{\macrogpupowerkernelw}{29.7~W}
+\newcommand{\macrogpuenergykernelnets}{1.62~J/GB}
+\newcommand{\macrogpuenergykernelgrosss}{1.90~J/GB}
+\newcommand{\macrogpuenergykernelconhost}{2.45}
+\newcommand{\macrogpuenergykernelconhosts}{2.45~J/GB}
+\newcommand{\macrogputputeetwopinned}{4.98}
+\newcommand{\macrogpuenergyeetwonet}{3.49}
+\newcommand{\macrogpuenergyeetwogross}{4.38}
+\newcommand{\macrogpupowereetwo}{21.8}
+\newcommand{\macrogpupowereetwow}{21.8~W}
+\newcommand{\macrogpuenergyeetwonets}{3.49~J/GB}
+\newcommand{\macrogpuenergyeetwogrosss}{4.38~J/GB}
+\newcommand{\macrogpuenergyeetwoconhost}{5.48}
+\newcommand{\macrogpuenergyeetwoconhosts}{5.48~J/GB}
+\newcommand{\macrogputputeetwopageable}{3.86}
+\newcommand{\macrogpuenergyeetwopageablenets}{3.77~J/GB}
+\newcommand{\macrogpuenergyeetwopageableconhosts}{6.34~J/GB}
+\newcommand{\macrogpupeakkernel}{22.29}
+\newcommand{\macrogpupeakeetwo}{5.87}
+\newcommand{\macrocpuenergyidlepower}{5.15}
+\newcommand{\macrocpuenergyidlepowers}{5.15~W}
+\newcommand{\macrogpupoweridle}{4.44}
+\newcommand{\macrogpupoweridles}{4.44~W}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Desarrollo y evaluación de un Acelerador Criptográfico para el Algoritmo SHA-2 en Hardware Reconfigurable\\
+}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Benjamín Oyarzún Valdebenito}
+\IEEEauthorblockA{\textit{Departamento de Ingeniería Eléctrica} \\
+\textit{Universidad de Santiago de Chile}\\
+Santiago, Chile \\
+benjamin.oyarzun.v@usach.cl}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Nicolás Ruminot Ahumada}
+\IEEEauthorblockA{\textit{Departamento de Ingeniería Eléctrica} \\
+\textit{Universidad de Santiago de Chile}\\
+Santiago, Chile \\
+nicolas.ruminot@usach.cl}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Christian Fernández-Campusano}
+\IEEEauthorblockA{\textit{Departamento de Ingeniería Eléctrica} \\
+\textit{Universidad de Santiago de Chile}\\
+Santiago, Chile \\
+christian.fernandez@usach.cl}
+}
+
+\maketitle
+
+\begin{abstract}
+El algoritmo criptográfico SHA-256 es fundamental en la seguridad de redes y en sistemas de consenso distribuido, donde la constante validación de bloques impone una elevada demanda computacional y energética. Este artículo presenta un análisis comparativo y experimental de dicho algoritmo sobre tres arquitecturas heterogéneas: un procesador multinúcleo Intel Core i7 con extensiones vectoriales SHA-NI, un acelerador gráfico masivamente paralelo NVIDIA GeForce RTX 2050 y un coprocesador dedicado desarrollado en Verilog RTL sobre una tarjeta FPGA AMD Spartan-7. A diferencia de estudios previos enfocados en minería sintética de un único bloque, la evaluación emplea una carga de trabajo homogénea de un gigabyte dividida en millones de mensajes independientes de sesenta y cuatro bytes, replicando entornos de red y árboles de Merkle. Bajo un protocolo de telemetría energética riguroso en bucles sostenidos, se cuantifica el impacto de la transferencia sobre el bus de interconexión, la memoria fija y la planificación dinámica libre de cerrojos. Los resultados empíricos revelan que la ventaja masiva de la GPU en cómputo puro queda limitada por el bus periférico en mensajes cortos, mientras que la CPU heterogénea alcanza la mayor eficiencia energética de sistema completo entre las plataformas con telemetría física. En FPGA, un núcleo iterativo estándar replicado en 24 instancias paralelas (76\,\% de las LUT de una Spartan-7) y validado en hardware sobre 12\,293 millones de hashes alcanza 1.13~GB/s a 100~MHz con 0.96~W estimados en el chip, lo que supone 0.77~J/GB netos y 0.85~J/GB brutos (estimación de Vivado, parcialmente extrapolada): la menor energía por byte del estudio, con un throughput 5.2 y 13.8 veces inferior al de la CPU y al de la GPU en cómputo puro, respectivamente.
+\end{abstract}
+
+\begin{IEEEkeywords}
+aceleradores, funciones hash, SHA-2, cómputo heterogéneo, FPGA.
+\end{IEEEkeywords}
+
+\section{Introducción}
+Los Algoritmos de Hash Seguro (SHA), estandarizados por el NIST \cite{fips180, sha1}, sustentan la integridad y autenticación en la infraestructura digital moderna. Entre ellos, SHA-256 es el estándar más extendido, garantizando desde protocolos TLS y verificación de árboles de Merkle hasta esquemas de consenso en redes blockchain \cite{bitcoin, eth}. Esta omnipresencia conlleva un costo energético global masivo: solo la validación de transacciones y minería computacional demandó más de 119 millones de MWh en 2023 \cite{laimon2025}, subrayando la urgencia de maximizar tanto el rendimiento como la eficiencia energética por byte procesado.
+
+Para procesar grandes volúmenes de hashing existen tres vías arquitectónicas principales: instrucciones vectoriales dedicadas en CPU (como Intel SHA-NI), aceleración masivamente paralela SIMT en GPU y circuitos integrados dedicados en FPGA/ASIC \cite{martino2020}. Sin embargo, la literatura existente adolece de un vacío crítico: la mayoría de los estudios evalúan aceleradores de forma aislada o se concentran en cargas de minería sintética de un solo mensaje largo sin considerar transferencias masivas de datos ni flujos de red continuos. Además, no existe una comparativa directa y sistemática de tres vías bajo un protocolo de telemetría energética riguroso y unificado que compute el consumo total del sistema incluyendo el procesador anfitrión.
+
+Para abordar este vacío, este artículo presenta un estudio comparativo riguroso con carga de trabajo unificada, y no una arquitectura nueva: el núcleo FPGA evaluado es un diseño iterativo estándar, y el aporte reside en medir las tres plataformas con el mismo mensaje, el mismo protocolo y las mismas métricas. Las contribuciones son:
+\begin{itemize}
+    \item \textbf{Evaluación heterogénea de tres vías:} Comparación directa de SHA-256 sobre CPU de consumo (Intel i7-1255U con SHA-NI), GPU móvil (NVIDIA RTX 2050) y FPGA reconfigurable (AMD Spartan-7 en RTL), incluyendo el escalado de 1 a 24 núcleos FPGA en paralelo validado en placa.
+    \item \textbf{Carga de trabajo unificada:} Modelo experimental homogéneo enfocado en flujos masivos de mensajes cortos independientes ($C = 64$~B sobre 1~GiB de payload útil), representativo de validación de paquetes y bloques criptográficos.
+    \item \textbf{Metodología energética integral:} Protocolo de telemetría unificado en bucles sostenidos ($\geq 15$~s) que distingue la potencia neta de solo dispositivo frente al sistema completo (dispositivo + host), y que declara explícitamente el perímetro y la naturaleza (medida o estimada) de cada fuente de potencia.
+    \item \textbf{Análisis de cuellos de botella de interconexión:} Caracterización empírica del impacto del bus PCIe, técnicas de staging de memoria y planificación dinámica multihilo para arquitecturas heterogéneas.
+\end{itemize}
+
+\section{Trabajo Relacionado}
+La literatura en aceleración de SHA-256 se estructura principalmente en tres ámbitos: implementaciones dedicadas en hardware reconfigurable, paralelismo masivo en coprocesadores gráficos y arquitecturas multinúcleo asistidas por extensiones vectoriales.
+
+\textit{1) Aceleradores en FPGA y ASIC:} Las técnicas arquitectónicas tradicionales para maximizar el throughput abarcan el desenrollado de bucles, la segmentación profunda (pipelining) y el reordenamiento espacial de etapas \cite{michail2009, chaves2006, r3}. Diseños recientes han llevado estos esquemas a límites extremos: Li et al.~\cite{r2} alcanzaron 219.65~Gbps mediante un pipeline completo de 64 niveles en Virtex-7, mientras que Nannipieri et al.~\cite{nannipieri2021} demostraron en ASIC TSMC de 7~nm tasas superiores a 33~Gbps con disipaciones estimadas de solo 13.45~mW. En el extremo opuesto, orientado a nodos embebidos y plataformas de bajo consumo, se prioriza la minimización de área y potencia dinámica mediante plegado de bucles y conversión de reloj con compuertas \cite{martino2020, martino_iot2020, r4, gad2020low}. Para elevar la tasa de hashes sin abandonar núcleos compactos, otra línea de trabajo replica varios núcleos SHA-256 en paralelo con memoria local, como el acelerador de 8~elementos de procesamiento de Phan et al.~\cite{phan2021multicore}, la arquitectura \textit{multimem} de Tran et al.~\cite{tran2021multimem} y el acelerador de 64~núcleos para minería de Tran et al.~\cite{tran2021bca}; esta última evaluación muestra además que la transferencia de datos entre el anfitrión y la placa puede dominar el tiempo total, multiplicándolo por 550 frente al cómputo en el caso de un diseño de referencia. Complementariamente, diversas arquitecturas multimodo y plataformas de co-diseño HW/SW han explorado compromisos entre flexibilidad algorítmica y sobrecarga de multiplexación \cite{r1, kammoun2020}. Asimismo, cabe destacar que algunas comparaciones FPGA vs.~CPU de la literatura contrastan sus diseños frente a CPUs sin extensiones SHA-NI (por ejemplo, Pham et al.~\cite{r1} evalúan frente a un Intel Core i9-10940X carente de SHA-NI), mientras que este trabajo establece como línea base rigurosa una CPU con soporte nativo de SHA-NI.
+
+\textit{2) Aceleración en GPU y extensiones vectoriales en CPU:} La arquitectura masivamente paralela SIMT de las GPUs ha sido ampliamente explotada en esquemas de minería de bloques y hashes criptográficos concurrentes; Mehammed et al.~\cite{ijisrt2021, mehammed2025} caracterizaron la distribución de bloques de hilos, ocupación de registros y jerarquía de memoria en CUDA, reportando aceleraciones significativas frente a implementaciones secuenciales en CPU. Por su parte, en arquitecturas de CPU de propósito general, Gueron et al.~\cite{gueron2012simultaneous} formalizaron el procesamiento multi-buffer vectorizado para amortizar latencias en el cálculo concurrente de mensajes independientes, principio que cristalizó en microarquitecturas comerciales mediante instrucciones dedicadas por hardware como Intel SHA Extensions (SHA-NI) \cite{gulley2013intel}. Faz-Hernández et al.~\cite{fazhernandez2018sok} evaluaron SHA-NI en procesadores AMD Zen y mostraron que intercalar varios mensajes independientes en un esquema segmentado reduce entre 18 y 21\,\% el tiempo de hashing de árboles de Merkle, un escenario de muchos mensajes cortos análogo al de este trabajo.
+
+La Tabla~\ref{tab:fpga_lit} (Sección~\ref{sec:fpga_results}) resume los parámetros de implementación reportados por los trabajos FPGA citados, junto con los del núcleo evaluado aquí.
+
+\textit{3) Vacío en la literatura:} Si bien diversas investigaciones han realizado comparativas entre subconjuntos de plataformas (tales como esquemas híbridos CPU-FPGA \cite{zhang2020hybrid, liu2019energy}, este último con potencia medida en placa y una eficiencia energética más de 200\,\% superior a la de una GPU GTX~750~Ti en recuperación de contraseñas con SHA-256 iterado, dobles hashes para minería en CPU/GPU/FPGA \cite{pham2020double}, coprocesadores dedicados frente a procesadores comerciales \cite{pham2026cryptorv} o análisis de tiempos de transferencia y cómputo \cite{gaspar2014jrc}), la literatura carece de una comparativa sistemática de tres vías que enfrente simultáneamente CPU con extensiones SHA-NI, GPU con optimización SIMT y FPGA RTL dedicada bajo una carga homogénea de mensajes cortos independientes y empleando un protocolo de telemetría energética unificado de sistema completo.
+
+\section{Fundamentos de SHA-256 y Estrategia de Aceleración}
+\label{sec:sha_background}
+
+\subsection{Estructura del algoritmo}
+
+SHA-256~\cite{fips180} transforma un mensaje de longitud arbitraria en un digest de 256~bits mediante cuatro pasos. (1)~\textit{Relleno:} al mensaje se le añade el bit~1, ceros y su longitud en 64~bits, hasta completar un múltiplo de 512~bits, y se divide en $B$ bloques de 512~bits. (2)~\textit{Expansión del mensaje:} cada bloque, visto como 16~palabras de 32~bits $M_0,\dots,M_{15}$, se expande a 64~palabras:
+\begin{equation}
+\begin{aligned}
+W_t &= M_t, && 0 \le t \le 15, \\
+W_t &= \sigma_1(W_{t-2}) + W_{t-7} \\
+    &\quad + \sigma_0(W_{t-15}) + W_{t-16}, && 16 \le t \le 63.
+\end{aligned}
+\label{eq:expansion}
+\end{equation}
+(3)~\textit{Compresión:} ocho variables de trabajo $a,\dots,h$, inicializadas con el estado $H^{(i-1)}$, se actualizan durante 64~rondas; en la ronda $t$:
+\begin{equation}
+\begin{aligned}
+T_1 &= h + \Sigma_1(e) + Ch(e,f,g) + K_t + W_t, \\
+T_2 &= \Sigma_0(a) + Maj(a,b,c), \\
+(a,\dots,h) &\leftarrow (T_1 + T_2,\; a,\; b,\; c,\; d + T_1,\; e,\; f,\; g),
+\end{aligned}
+\label{eq:round}
+\end{equation}
+donde $K_t$ son 64~constantes y $\Sigma$, $\sigma$, $Ch$ y $Maj$ son funciones de rotaciones, desplazamientos y operaciones lógicas bit a bit; todas las sumas son módulo $2^{32}$. (4)~\textit{Encadenamiento:} al terminar las 64~rondas, $H^{(i)} = H^{(i-1)} + (a,\dots,h)$, y el digest es el estado tras el último bloque, $H^{(B)}$.
+
+Tres propiedades de esta estructura determinan qué se puede acelerar. Primero, cada ronda necesita el resultado de la anterior (Ec.~\ref{eq:round}) y cada bloque necesita el estado del anterior, de modo que las $64 \cdot B$ rondas de un mensaje son inherentemente secuenciales: \emph{dentro} de un mensaje no hay paralelismo que explotar, solo se puede abaratar cada ronda. Segundo, mensajes distintos no comparten estado, por lo que el paralelismo disponible es \emph{entre} mensajes, y crece con el número de mensajes independientes; este es el caso de la carga de este trabajo. Tercero, la expansión (Ec.~\ref{eq:expansion}) solo depende de las últimas 16~palabras, así que no es necesario almacenar las 64, y además puede calcularse a la vez que la compresión.
+
+\subsection{Paralelización y optimización realizadas}
+
+La Tabla~\ref{tab:strategy} resume cómo cada plataforma explota estas propiedades. La \textbf{paralelización} es, en las tres, de datos y a nivel de mensaje: el conjunto de mensajes se reparte entre unidades de cómputo que ejecutan el mismo algoritmo sin comunicarse entre sí. En CPU las unidades son hilos sobre los núcleos del procesador, que toman lotes de mensajes de una cola común; en GPU, cada mensaje se asigna a un hilo CUDA y la tarjeta ejecuta miles de ellos simultáneamente; en FPGA, el núcleo de cómputo se replica físicamente $N$ veces en el chip. En los tres casos el throughput ideal crece linealmente con el número de unidades, y los resultados de la Sección~\ref{sec:results} muestran cuánto se aleja cada plataforma de ese ideal y por qué (límite de potencia en CPU, bus PCIe en GPU, área del chip en FPGA).
+
+La \textbf{optimización} actúa sobre el costo de procesar cada mensaje, en tres frentes. (i)~\textit{Rondas de compresión:} en CPU, las instrucciones SHA-NI ejecutan dos rondas completas de la Ec.~\ref{eq:round} por instrucción, en lugar de las decenas de instrucciones de propósito general de la versión escalar; en GPU, las 64~rondas se desenrollan para eliminar el bucle; en FPGA, una ronda completa se resuelve en lógica combinacional en un ciclo de reloj. (ii)~\textit{Expansión del mensaje:} GPU y FPGA sustituyen el arreglo de 64~palabras por una ventana deslizante de 16, que en GPU libera registros y permite alojar más hilos por procesador, y en FPGA reduce cuatro veces los biestables de la expansión; en CPU, SHA-NI calcula cuatro palabras $W_t$ por paso con instrucciones dedicadas. (iii)~\textit{Entrada y salida de datos:} en GPU, donde los mensajes deben cruzar el bus PCIe, se usa memoria fijada y tres flujos que solapan envío, cómputo y retorno. Las Secciones~\ref{sec:cpu_impl} a~\ref{sec:fpga_opt} detallan cada implementación.
+
+\begin{table}[htbp]
+  \caption{Qué parte de SHA-256 se paraleliza u optimiza en cada plataforma}
+  \label{tab:strategy}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}p{1.45cm}p{2.2cm}p{2.2cm}p{2.2cm}@{}}
+    \toprule
+    \textbf{Parte} & \textbf{CPU (SHA-NI)} & \textbf{GPU (v2)} & \textbf{FPGA} \\
+    \midrule
+    Mensajes independientes & \raggedright 1 a 12 hilos; cola de tareas dinámica & \raggedright un hilo CUDA por mensaje; miles a la vez & $N = 1$ a 24 núcleos replicados \\
+    \addlinespace
+    Expansión $W_t$ & \raggedright instrucciones dedicadas: 4 palabras por paso & \raggedright ventana circular de 16 palabras en registros & ventana de 16 palabras; $W_t$ en paralelo a la ronda \\
+    \addlinespace
+    Rondas de compresión & \raggedright 2 rondas por instrucción & \raggedright 64 rondas desenrolladas, sin bucle & 1 ronda por ciclo de reloj \\
+    \addlinespace
+    Constantes $K_t$ & \raggedright tabla en memoria & \raggedright memoria de constantes de la GPU & ROM en LUT \\
+    \addlinespace
+    Entrada y salida & \raggedright RAM del anfitrión & \raggedright PCIe; memoria fijada y 3 flujos solapados & generación en el chip \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%% ═════════════════════════════════════════════════════════════════
+\section{Metodología}
+%% ═════════════════════════════════════════════════════════════════
+
+Para evaluar exhaustivamente el rendimiento y la eficiencia energética de SHA-256 en CPU, GPU y FPGA, se establece un marco experimental heterogéneo enfocado en el procesamiento masivo de mensajes cortos independientes (representativos de la verificación en árboles de Merkle, validación de paquetes y transacciones blockchain).
+
+\subsection{Workload Unificado y Métricas de Rendimiento}
+
+El conjunto de datos consiste en un archivo binario de 1~GiB (1\,073\,741\,824~bytes, $2^{30}$~B) generado con un PRNG de semilla fija. Para modelar mensajes independientes, el archivo se particiona en:
+\begin{equation}
+N = \left\lfloor \frac{2^{30}}{C} \right\rfloor
+\label{eq:num_chunks}
+\end{equation}
+fragmentos contiguos de $C$~bytes. Por el relleno descrito en la Sección~\ref{sec:sha_background}, cada mensaje ocupa al menos $C + 9$ bytes. El número de bloques de compresión de 64~bytes procesados por cada fragmento es:
+\begin{equation}
+B = \left\lceil \frac{C + 9}{64} \right\rceil
+\label{eq:blocks}
+\end{equation}
+La salida de cada corrida consiste en el arreglo contiguo de los $N$ digests resultantes ($N \times 32$~bytes en memoria). El escenario principal del estudio es $C = 64$~bytes ($N = 16\,777\,216$ fragmentos, $B = 2$ bloques por mensaje y salida de 512~MiB). Adicionalmente, se realiza un barrido paramétrico en CPU y GPU con $C \in \{64~\text{B},\; 1~\text{KB},\; 4~\text{KB},\; 64~\text{KB},\; 1~\text{MB}\}$.
+
+Las métricas normalizadas de evaluación son:
+\begin{itemize}
+    \item \textbf{Throughput útil [GB/s]:} Tasa de procesamiento del payload real ($N \cdot C$), excluyendo relleno y cabecera de longitud:
+    \begin{equation}
+        \text{Throughput} = \frac{N \cdot C}{t \cdot 10^{9}} \quad [\text{GB/s}]
+        \label{eq:throughput}
+    \end{equation}
+    donde $t$ es el tiempo de ejecución en segundos. Complementariamente, las tasas de procesamiento aritmético se obtienen como $\text{hashes/s} = N/t$ y $\text{bloques/s} = (N \cdot B)/t$.
+    
+    \item \textbf{Eficiencia energética [J/GB]:} Energía neta consumida por gigabyte útil procesado:
+    \begin{equation}
+        \text{J/GB} = \frac{\Delta E}{\text{iteraciones} \cdot (N \cdot C / 10^{9})}
+        \label{eq:jgb}
+    \end{equation}
+    donde $\Delta E$ representa la energía neta ($\Delta E_\text{neta} = \Delta E_\text{bruta} - P_\text{reposo} \cdot t$).
+
+    \item \textbf{Factor de Aceleración (Speedup):} Se establece una única definición de referencia en todo el documento:
+    \begin{equation}
+        \text{Speedup} = \frac{\text{Throughput}_\text{plataforma}}{\text{Throughput}_\text{SHA-NI 4T}}
+        \label{eq:speedup}
+    \end{equation}
+    anclada en la configuración CPU SHA-NI con 4 hilos extremo a extremo (E2E, \textit{end-to-end}) sobre el escenario principal ($C = 64$~B, throughput medido de \macrocputputfour~GB/s).
+\end{itemize}
+
+La métrica extremo a extremo (E2E) abarca el flujo completo: en CPU comprende la lectura secuencial de fragmentos precargados en memoria RAM y la escritura contigua de digests en RAM (RAM$\to$RAM); en GPU incluye la transferencia H2D del payload vía PCIe, la ejecución del kernel y la transferencia D2H de los digests hacia el anfitrión. En el código fuente, la modalidad pinned preasigna y fija los buffers antes del bucle de medición (sin copia intermedia en el tiempo medido), mientras que la modalidad pageable incluye explícitamente, dentro del intervalo temporal y energético medido, una copia síncrona de 1~GiB desde la memoria virtual paginable al buffer fijado.
+
+\textit{Adaptación del workload en FPGA:}\label{sec:workload_fpga} la memoria en chip del dispositivo xc7s100 ($\approx$540~KiB de BRAM) no puede alojar el archivo de 1~GiB ni el arreglo de 512~MiB de digests, y el montaje no dispone de un enlace de alta velocidad hacia el anfitrión equivalente a PCIe, por lo que en FPGA los mensajes se generan en el chip. Cada mensaje de $C=64$~B ($B=2$) se forma, en un primer bloque, con un contador de 64~bits, el digest del mensaje anterior (256~bits), el complemento del contador mezclado con el identificador del núcleo (64~bits) y los 128~bits bajos del digest anterior; el segundo bloque contiene exactamente el relleno FIPS~180-4 de un mensaje de 64~B (\texttt{0x80}, ceros y la longitud 512), igual que en CPU y GPU. Como cada hash depende del precedente, ningún mensaje puede omitirse, y el anfitrión puede recomputar la cadena completa con la implementación de referencia de Python (biblioteca \textit{hashlib}) para verificar el digest final bit a bit. Esta modalidad equivale al régimen \textit{kernel-only} de la GPU (datos ya residentes en el dispositivo), por lo que la FPGA se compara con dicho régimen y no con las mediciones E2E.
+
+\subsection{Protocolo de Medición y Telemetría}
+
+Cada configuración se evalúa tras 3~s de calentamiento mediante bucles continuos de $\geq 15$~s por corrida a lo largo de 5 repeticiones consecutivas (reportando media $\pm$ desviación estándar). En CPU, la potencia del paquete se adquiere mediante el contador de energía Intel RAPL en el dominio del encapsulado completo (\textit{package}, PKG), con el procesador sujeto a su límite de potencia sostenida (PL1) de 20.0~W fijado por el firmware del equipo y sin eventos de estrangulamiento térmico, deduciendo el consumo basal en reposo ($5.15 \pm 0.06$~W) para obtener la energía neta. En GPU, se utiliza el contador acumulativo de energía por hardware de la tarjeta, leído mediante la biblioteca de gestión de NVIDIA (NVML), descontando un reposo de $4.44 \pm 0.29$~W, y se registra simultáneamente el consumo RAPL PKG del host, permitiendo cuantificar la energía neta tanto del dispositivo aislado como del sistema completo GPU+host (excluyendo la DRAM del host). El hilo anfitrión que controla la GPU no se fija a ningún núcleo, por lo que el planificador del sistema operativo puede ejecutarlo en cualquiera de las 12 CPUs lógicas del host (0--11). La correctitud algorítmica se valida mediante los 4 vectores estándar del NIST y la comparación de todos los digests con la implementación de referencia de Python (biblioteca \textit{hashlib}).
+
+\textit{Protocolo en FPGA:} el diseño opera a 100~MHz, obtenidos dividiendo por dos el reloj diferencial de 200~MHz de la placa SP701. Un núcleo \textit{Virtual I/O} (VIO) controla el inicio y la parada del banco de prueba en chip y expone el número de mensajes completados, los ciclos activos, el último digest y el resultado del autotest NIST (vector ``abc'', ejecutado en silicio tras cada reset). Un script Tcl en el \textit{Hardware Manager} de Vivado aplica, para cada $N$, 3~s de calentamiento seguidos de 5~corridas de 60~s cronometradas con el reloj del anfitrión. El throughput (Ec.~\ref{eq:throughput}) se calcula con los ciclos contados en hardware (136~por mensaje y núcleo, verificados en cada corrida) y la frecuencia nominal; el reloj del anfitrión solo sirve para comprobar dicha frecuencia (99.86--99.98~MHz estimados, con una desviación atribuible a la latencia JTAG de los comandos de inicio y parada). Al final de cada corrida, el anfitrión recomputa las $N$ cadenas de mensajes y compara su XOR con el digest leído de la FPGA.
+
+La potencia de la FPGA no se mide físicamente: se \emph{estima} con el análisis de potencia de Vivado~2026.1 sobre el diseño ya ruteado del mismo envoltorio multinúcleo, sin la infraestructura de depuración (el núcleo VIO y su concentrador JTAG). Para $N=1$, 4 y 8, la actividad de conmutación proviene de una simulación funcional post-implementación en régimen continuo (archivo SAIF de 200~\si{\micro\second}, equivalente a 20\,000 ciclos y $\approx$147~mensajes por núcleo, tras 50~\si{\micro\second} de arranque), con nivel de confianza \textit{High} y 53--60\,\% de las redes anotadas (el resto se propaga probabilísticamente). Para $N=16$ y 24 esta simulación no es posible, pues la licencia gratuita de XSim limita el tamaño del diseño simulable ($\approx$50\,000 instancias); su potencia dinámica se extrapola como el promedio de dos métodos: (a) la recta ajustada a los tres puntos SAIF, $P_\text{din} = -0.0060 + 0.03769\,N$~W ($R^2 = 0.9986$), y (b) la estimación \textit{vectorless} del propio diseño (0.024, 0.101, 0.195, 0.391 y 0.580~W para $N = 1$--24, con $R^2 = 0.9999$ frente a $N$) multiplicada por la razón media SAIF/\textit{vectorless} observada en $N = 1$, 4 y 8 ($1.454 \pm 0.076$). Ambos métodos coinciden dentro de $\pm 3.5$\,\% y su rango se reporta junto a cada valor extrapolado. Como aproximación a la Ec.~\ref{eq:jgb}, la energía neta usa la potencia dinámica del bloque evaluado (el equivalente de descontar el reposo) y la energía bruta añade la potencia estática del chip (0.090~W, constante en los cinco puntos).
+
+\begin{table}[htbp]
+  \caption{Plataforma experimental}
+  \label{tab:setup}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{2.6pt}
+  \begin{tabular}{@{}llll@{}}
+    \toprule
+     & \textbf{CPU} & \textbf{GPU} & \textbf{FPGA} \\
+    \midrule
+    Dispositivo & i7-1255U & RTX 2050 móvil & Spartan-7 \\
+    Arquitectura & Alder Lake & Ampere GA107M & xc7s100, SP701 \\
+    Cómputo & 2P+8E, 12 hilos & 16 SM, 2\,048 núcl. & 64\,000 LUT \\
+    Memoria & 16~GB DDR4 & 4~GB GDDR6 & 540~KiB BRAM \\
+    Potencia nom. & 15~W (límite 20~W) & 30~W & --- \\
+    Frecuencia & variable & variable & 100~MHz fija \\
+    Enlace & --- & PCIe 4.0 $\times$4 & JTAG \\
+    Herramientas & GCC 15.2, -O3 & CUDA 12.4, -O3 & Vivado 2026.1 \\
+    Potencia med. & RAPL (paquete) & NVML (tarjeta) & Vivado (estim.) \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{2pt}
+  \begin{minipage}{\columnwidth}\footnotesize\raggedright
+  CPU y GPU comparten el mismo equipo portátil (Ubuntu 26.04 LTS, núcleo Linux 7.0, controlador NVIDIA 595.99.02). La FPGA se controla por JTAG desde un PC con Vivado, que no participa en el cómputo.
+  \end{minipage}
+\end{table}
+
+\subsection{Implementaciones de Línea Base (CPU)}
+\label{sec:cpu_impl}
+
+La Tabla~\ref{tab:setup} resume las tres plataformas. En CPU, el regulador de frecuencia del sistema operativo se mantuvo en su modo de ahorro de energía (\textit{powersave}), que ajusta la frecuencia según la carga. Los hilos de cómputo se fijan, mediante la afinidad de procesador del sistema operativo, a los núcleos de alta eficiencia (E-cores, CPUs 4--11), y se evalúa además una configuración sobre las 12 CPUs lógicas del procesador (0--11, P+E). Se compilaron dos variantes con GCC~15.2 y nivel de optimización -O3:
+\begin{itemize}
+    \item \textbf{Escalar (x86-64):} Instrucciones de propósito general sin aceleración criptográfica.
+    \item \textbf{SHA-NI:} Instrucciones nativas Intel SHA Extensions, habilitadas en el compilador junto con las instrucciones vectoriales SSE4.1 de las que dependen, que ejecutan las rondas de compresión directamente sobre registros de 128 bits.
+\end{itemize}
+El escalado se evaluó con 1, 4, 8 hilos, 12 hilos sobre los 8 E-cores (sobresuscripción) y 12 CPUs (P+E). Para mitigar el desbalance de cómputo por la asimetría microarquitectónica entre núcleos P y E, se implementó una cola de trabajo compartida con tareas de 64K fragmentos (4~MiB): cada hilo, al terminar una tarea, toma la siguiente incrementando un contador común mediante una operación atómica, sin cerrojos (\textit{lock-free atomic counter}), de modo que los núcleos más rápidos procesan más tareas sin esperar a los lentos.
+
+\subsection{Ejecución Masivamente Paralela (GPU)}
+
+La implementación GPU (Tabla~\ref{tab:setup}) se compiló con CUDA~12.4 y nivel de optimización -O3 para la arquitectura de cómputo de la tarjeta. El kernel se lanza con bloques de 256 hilos; en modo kernel-only el grid está dimensionado a 384 bloques, mientras que en modo E2E el procesamiento se particiona en lotes de 64~MiB (67\,108\,864~B) por stream con grids dinámicos de hasta 4\,096 bloques en $C=64$~B.
+
+Como línea base, el kernel v1 asigna un hilo CUDA por fragmento y almacena la expansión de mensajes en un arreglo de 64 palabras de 32~bits, limitando la ocupación a 2 bloques por SM (33.3\% de los 1\,536 hilos teóricos) debido al elevado consumo de registros ($\approx$100 registros/hilo). Para superar esta limitación, la implementación v2 incorpora cuatro optimizaciones críticas de kernel y transferencia:
+\begin{enumerate}
+    \item \textbf{Ventana circular de 16 palabras:} Conserva solo las 16 palabras de la expansión que se reutilizan y, junto con un límite de compilación de 48 registros por hilo, reduce el consumo de registros, elevando los bloques residentes por SM de 2 a 5 (ocupación teórica de 83.3\%).
+    \item \textbf{Memoria host pinned:} Reserva de memoria fijada en el anfitrión (no paginable) mediante la API de CUDA, que permite transferencias DMA asíncronas directas sin buffers intermedios del controlador.
+    \item \textbf{Pipeline triple asíncrono:} Uso de 3 streams CUDA concurrentes para superponer la transferencia H2D de lotes de 64~MiB, la ejecución del kernel y la transferencia D2H de digests.
+    \item \textbf{Bucle \textit{grid-stride}:} Desacoplamiento del dimensionamiento de la malla respecto al total de fragmentos $N$, asegurando una distribución balanceada de bloques en los 16~SMs.
+\end{enumerate}
+
+\subsection{Amenazas a la Validez y Limitaciones}
+
+Las conclusiones experimentales de este trabajo deben interpretarse considerando las siguientes limitaciones metodológicas: (1) las evaluaciones se concentran en una única plataforma móvil de consumo (laptop con CPU Intel i7-1255U bajo un límite de potencia sostenida de 20~W, GPU NVIDIA RTX 2050 móvil de 30~W y enlace PCIe Gen~4 $\times$4); (2) existe una asimetría en los perímetros de telemetría, ya que NVML engloba el consumo de la memoria GDDR6 integrada en la GPU, mientras que Intel RAPL PKG excluye el consumo de la memoria DRAM del host; (3) la verificación cruzada de potencia instantánea de NVML recurre al mismo sensor analógico que el contador acumulativo de energía del dispositivo; (4) la ventana de relajación del límite PL1 impuesta por la plataforma es de 39.98~s frente a ventanas de corrida de 15~s; (5) el análisis microarquitectónico de GPU se basa en métricas de compilación del ensamblador de CUDA y telemetría de eventos temporales sin perfilado granular de contadores hardware con NVIDIA Nsight Compute; (6) el hilo anfitrión de la GPU no tiene afinidad fijada y puede migrar entre núcleos P y E, lo que puede alterar la energía del host; (7) en modo pinned se asume que los datos se generan directamente en memoria fija (sin copia de staging dentro del intervalo medido); (8) el modo de ahorro de energía del regulador de frecuencia deja las frecuencias de CPU sin fijar, y no se registraron relojes ni razones de \textit{throttling} de la GPU durante las corridas; (9) la potencia de la FPGA es una estimación del modelo de Vivado con actividad simulada (y, para $N=16$ y 24, extrapolada a partir de $N \leq 8$), no una medición física como RAPL o NVML, y abarca solo el chip, sin los reguladores ni la memoria de la placa (NVML incluye la memoria GDDR6 de la GPU); como referencia del margen de error, Lin et al.~\cite{lin2022powergear} compararon el estimador de Vivado, alimentado con actividad SAIF como aquí, con mediciones en una placa ZCU102 y obtuvieron un error medio de 21.8\,\% en la potencia total (13.6--28.3\,\% según el diseño) en aplicaciones HLS, aunque la magnitud para este diseño no se ha cuantificado; y (10) el workload de la FPGA se genera en el chip y no incluye transferencias desde el anfitrión ni la escritura de los $N$ digests en memoria, por lo que sus cifras se comparan con el régimen \textit{kernel-only} de la GPU y no con las mediciones E2E, y su speedup respecto de la CPU E2E es solo orientativo.
+
+\subsection{Diseño de Microarquitectura RTL}
+
+La implementación FPGA se desplegó en la placa AMD SP701 (Tabla~\ref{tab:setup}), con una restricción de reloj de 10~ns (100~MHz). El núcleo, descrito en Verilog, implementa la arquitectura iterativa estándar de una ronda por ciclo (\textit{loop rolling}~\cite{martino2020}): una máquina de estados de tres fases carga el bloque de 512~bits y las variables de trabajo $a$--$h$ (1~ciclo), ejecuta las 64~rondas (64~ciclos) y acumula el estado intermedio $H^{(i)} = H^{(i-1)} + \{a,\dots,h\}$ (1~ciclo), totalizando 66~ciclos por bloque. Las constantes $K_t$ se implementan como una ROM en LUT y el encadenamiento de $H^{(i)}$ permite procesar mensajes de $B \geq 2$ bloques. Un banco de prueba en el chip genera los mensajes de $C=64$~B descritos en la Sección~\ref{sec:workload_fpga}, ejecuta el autotest NIST y mantiene los contadores de mensajes y de ciclos; su intercambio con el núcleo añade 2~ciclos por bloque, de modo que la latencia medida es de 68~ciclos por bloque y 136~por mensaje.
+
+El diseño multinúcleo instancia $N \in \{1, 4, 8, 16, 24\}$ copias del banco con su núcleo mediante replicación paramétrica en Verilog. Tres decisiones garantizan que el escalado sea una réplica fiel del diseño de un núcleo: (i) cada copia recibe un identificador de núcleo distinto (parámetro CORE\_ID) que se mezcla en el tercer campo del primer bloque, de modo que cada núcleo procesa una cadena de mensajes diferente (el núcleo~0 reproduce exactamente la cadena del diseño de un núcleo) y la síntesis no puede fusionar lógica entre núcleos; (ii) un atributo de síntesis que conserva la jerarquía de cada núcleo (\textit{keep\_hierarchy}) impide que Vivado comparta entre núcleos los registros de control, que son idénticos al no depender de los datos, y hace comparables los reportes de área y potencia por jerarquía; y (iii) todos los núcleos comparten reloj, reset y la señal de marcha, y como la máquina de estados es determinista avanzan en sincronía, completando el mismo número de mensajes y deteniéndose en el mismo ciclo (comprobado en simulación y en placa). El envoltorio expone los contadores del núcleo~0 y entrega el XOR registrado de los $N$ digests y la conjunción de los $N$ autotests, lo que permite reutilizar sin cambios el VIO, las restricciones y el script de medición del diseño original.
+
+\subsection{Optimizaciones de Ruta de Datos y Ruta de Control}
+\label{sec:fpga_opt}
+
+Las optimizaciones aplicadas son decisiones de diseño del RTL, no transformaciones inferidas por la herramienta. La expansión de mensajes usa una ventana deslizante de 16~palabras ($W[0..15]$, 512~FF) en lugar de almacenar las 64~palabras $W_t$ (2\,048~FF), técnica estándar~\cite{martino2020} análoga a la ventana de 16 palabras del kernel GPU~v2; en cada ronda la nueva palabra $W_{t+16} = \sigma_1(W_{t+14}) + W_{t+9} + \sigma_0(W_{t+1}) + W_t$ se calcula en paralelo y fuera del camino crítico del compresor, que queda determinado por la suma $T_1 + T_2$ con $T_1 = h + \Sigma_1(e) + Ch(e,f,g) + K_t + W_t$. Las rotaciones y los operadores $\Sigma$, $\sigma$, $Ch$ y $Maj$ son cableados; los sumadores se mapean sobre las cadenas de acarreo de la lógica configurable, sin bloques DSP ni BRAM, lo que mantiene el núcleo en 1\,757--1\,792~LUT y 1\,054--1\,057~FF. En la ruta de control, el contador de ciclos solo avanza mientras hay un mensaje en curso (no durante el autotest ni con el banco detenido), y las salidas agregadas del envoltorio multinúcleo (XOR y conjunción) están registradas para no alargar ningún camino combinacional. No se aplicaron técnicas de reducción del camino crítico, como el precómputo de $h + K_t + W_t$~\cite{r3}, el reordenamiento espacial de operaciones o el \textit{quasi-pipelining}~\cite{martino2020}, ni desenrollado de rondas; el objetivo no fue maximizar la frecuencia sino evaluar, bajo la carga unificada, un núcleo representativo del estado de la práctica.
+
+%% ═════════════════════════════════════════════════════════════════
+\section{Resultados}
+\label{sec:results}
+%% ═════════════════════════════════════════════════════════════════
+
+A continuación se presentan y discuten los resultados experimentales obtenidos en las plataformas CPU, GPU y FPGA bajo el protocolo descrito.
+
+\subsection{Resultados de CPU}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{cpu_scaling.pdf}
+    \caption{Resultados de CPU ($C=64$~B, media de 5~corridas): (a)~throughput útil, con barras de error de una desviación estándar; (b)~energía neta por GB (eje logarítmico). En gris, la versión escalar sin aceleración.}
+    \label{fig:cpu_scaling}
+\end{figure}
+
+La Figura~\ref{fig:cpu_scaling} resume las configuraciones de CPU (valores exactos en la Tabla~\ref{tab:comparison}). El peor caso es la versión escalar con un hilo (\macrocputputscalar~GB/s y \macrocpuenergyscalarnet~J/GB netos) y el mejor, SHA-NI sobre las 12~CPUs (\macrocputputtwelvepe~GB/s y \macrocpuenergytwelvepenets): 53~veces más throughput con 18~veces menos energía. Solo las instrucciones SHA-NI, con un hilo, aportan un factor de 8.1 (\macrocputputshani~GB/s). El escalado es lineal hasta 4~hilos (\macrocputputfour~GB/s) y se satura a partir de 8 (\macrocputputeight~GB/s), porque la potencia del paquete queda fijada en $\approx$20~W por el límite de potencia sostenida (PL1), sin estrangulamiento térmico (65--72~$^\circ$C); con 12~hilos sobre los 8~E-cores el resultado (5.62~GB/s) es equivalente al de 8.
+
+En la configuración de 12~CPUs (P+E), la cola de trabajo dinámica redujo el desbalance entre núcleos rápidos y lentos de 146.9~ms a 6.6~ms y elevó el throughput de 4.51~GB/s (reparto estático) a \macrocputputtwelvepe~GB/s. Por último, al crecer $C$ (curva de referencia de la Figura~\ref{fig:throughput_vs_c}), SHA-NI 4T sube de \macrocputputfour~GB/s en 64~B a 8.99~GB/s en 1~MB y su energía neta baja a 1.58~J/GB: el bloque de relleno pasa del 50\,\% del trabajo a menos del 0.1\,\%, y se amortiza una sobrecarga residual de $\approx$21.2\,\% en mensajes mínimos, probablemente atribuible a la inicialización reiterada del estado $H^{(0)}$ y a las escrituras dispersas de digests.
+
+\subsection{Resultados de GPU}
+
+La comparación entre los kernels v1 (base) y v2 (alta utilización) a lo largo del barrido de $C$ se resume en la Tabla~\ref{tab:c_sweep} y se ilustra en la Figura~\ref{fig:throughput_vs_c} (staging pinned). El kernel v2 domina ampliamente en concurrencia masiva: en $C=64$~B logra \macrogputputkernel~GB/s kernel-only (mejora de 3.8$\times$ sobre los 4.11~GB/s de v1), alcanzando un pico de \macrogpupeakkernel~GB/s en $C=64$~KB (7.3$\times$ vs.~v1). Asimismo, el kernel v2 rinde 8.24~GB/s en $C=4$~KB frente a 21.52~GB/s (1~KB) y 22.29~GB/s (64~KB), exhibiendo un comportamiento no monótono; como hipótesis (no verificada al no disponer de perfilado con Nsight Compute), esta degradación se atribuye a accesos no coalescentes, donde la separación entre hilos de $C$ bytes y strides potencia de dos podrían causar conflictos en la caché L2 o en los canales de DRAM. En $C=1$~MB, el throughput converge a $\approx$3.34--3.37~GB/s en régimen kernel-only y a 2.45~GB/s en modo E2E; se plantea como hipótesis que este comportamiento responde a una severa falta de paralelismo más que a la latencia de memoria: en modo kernel-only se ejecuta un único lanzamiento con solo $N=1\,024$ hilos útiles (un hilo por fragmento sobre 1~GiB), ocupando apenas el 4.2\% de la capacidad del chip (16~SM $\times$ 1\,536 = 24\,576 hilos residentes); por su parte, en modo E2E, al particionar el trabajo en lotes de 64~MiB por stream, cada lanzamiento procesa únicamente 64 fragmentos (64 hilos), alcanzando con 3 streams concurrentes a lo sumo $\approx$192 hilos en vuelo ($<0.8\%$ de ocupación). Cabe señalar además que asignar un hilo por mensaje no resulta representativo para procesar mensajes largos, donde el paralelismo intra-mensaje ofrecería una mayor saturación de la arquitectura.
+
+\begin{table}[htbp]
+  \caption{Barrido de tamaño de fragmento $C$ en CPU SHA-NI 4T y GPU (kernels v1 y v2)}
+  \label{tab:c_sweep}
+  \centering
+  \setlength{\tabcolsep}{2.5pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccccc}
+    \toprule
+    \textbf{$C$ (B)} & \textbf{$N$ (frag.)} & \textbf{$B$ (bloques)} & \textbf{CPU SHA-NI 4T} & \textbf{GPU v1 kernel} & \textbf{GPU v2 kernel} & \textbf{GPU v2 E2E} & \textbf{Speedup E2E$^a$} \\
+    & & & \textbf{(GB/s)} & \textbf{(GB/s)} & \textbf{(GB/s)} & \textbf{(GB/s)} & \\
+    \midrule
+    64          & 16\,777\,216 &     2 & 3.55 $\pm$ 0.00 & 4.11 $\pm$ 0.00 & 15.62 $\pm$ 0.15 & 4.98 $\pm$ 0.02 & 1.40$\times$ \\
+    1\,024      &  1\,048\,576 &    17 & 8.21 $\pm$ 0.01 & 5.63 $\pm$ 0.02 & 21.52 $\pm$ 0.21 & 5.82 $\pm$ 0.00 & 0.71$\times$ \\
+    4\,096      &     262\,144 &    65 & 8.72 $\pm$ 0.12 & 3.76 $\pm$ 0.02 &  8.24 $\pm$ 0.04 & 5.87 $\pm$ 0.01 & 0.67$\times$ \\
+    65\,536     &      16\,384 &  1025 & 8.97 $\pm$ 0.01 & 3.06 $\pm$ 0.01 & 22.29 $\pm$ 0.10 & 5.36 $\pm$ 0.01 & 0.60$\times$ \\
+    1\,048\,576 &       1\,024 & 16385 & 8.99 $\pm$ 0.00 & 3.34 $\pm$ 0.00 &  3.37 $\pm$ 0.00 & 2.45 $\pm$ 0.00 & 0.27$\times$ \\
+    \bottomrule
+    \multicolumn{8}{l}{\footnotesize $^a$Speedup E2E = Throughput GPU v2 E2E pinned / Throughput CPU SHA-NI 4T.} \\
+  \end{tabular}%
+  }
+\end{table}
+
+La Tabla~\ref{tab:gpu_staging} cuantifica el impacto del staging de memoria en $C=64$~B. Mientras que el throughput kernel-only es idéntico entre pinned y pageable (\macrogputputkernel~GB/s), el throughput E2E se degrada un 22.5\% en pageable (de \macrogputputeetwopinned~a \macrogputputeetwopageable~GB/s) debido a la copia intermedia síncrona en el driver, incrementando el consumo total del host de 1.99 a 2.57~J/GB netos (+29.1\%) y elevando el consumo del sistema completo de \macrogpuenergyeetwoconhosts{} a \macrogpuenergyeetwopageableconhosts{} netos.
+
+\begin{table}[htbp]
+  \caption{Impacto del staging en GPU v2 ($C=64$~B)}
+  \label{tab:gpu_staging}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccccc}
+    \toprule
+    \textbf{Staging} & \textbf{Kernel-only (GB/s)} & \textbf{E2E (GB/s)} & \textbf{Ratio K/E2E} & \textbf{J/GB GPU} & \textbf{J/GB Host} & \textbf{J/GB Total} \\
+    \midrule
+    Pinned     & 15.62 $\pm$ 0.15 & 4.98 $\pm$ 0.02 & 3.13$\times$ & 3.49 $\pm$ 0.04 & 1.99 $\pm$ 0.04 & 5.48 $\pm$ 0.07 \\
+    Pageable   & 15.62 $\pm$ 0.15 & 3.86 $\pm$ 0.02 & 4.05$\times$ & 3.77 $\pm$ 0.03 & 2.57 $\pm$ 0.06 & 6.34 $\pm$ 0.09 \\
+    \bottomrule
+    \multicolumn{7}{l}{\footnotesize J/GB netos con $P_\text{reposo}$ de 4.44~W (GPU) y 5.15~W (Host RAPL PKG, excluye DRAM).} \\
+  \end{tabular}%
+  }
+\end{table}
+
+El enlace opera en modo PCIe Gen~4 $\times$4, cuyo ancho de banda teórico simplex es de 7.88~GB/s (considerando ya la codificación 128b/130b), reduciéndose a $\approx$6.4~GB/s útiles tras descontar la sobrecarga de tramas TLP y DLLP del protocolo. Con dos motores de copia DMA independientes, la GPU soporta transferencias H2D y D2H simultáneas. Para $C=64$~B con staging pinned, la GPU v2 alcanza \macrogputputkernel~GB/s kernel-only frente a \macrogputputeetwopinned~GB/s E2E (ratio K/E2E de 3.13$\times$), penalizada por la transferencia simultánea de 1\,073.7~MB de datos y 536.9~MB de digests por iteración, donde se plantea la hipótesis de que la competencia bidireccional por los recursos del controlador de bus limita el rendimiento efectivo. En fragmentos medianos ($C=1$--$4$~KB), la reducción del volumen de digests permite al throughput E2E alcanzar \macrogpupeakeetwo~GB/s ($\approx$92\% del límite útil del bus).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{throughput_vs_c.pdf}
+    \caption{Throughput de SHA-256 vs.~tamaño de fragmento $C$ para GPU v1/v2 (kernel-only y E2E, staging pinned) y serie de referencia CPU SHA-NI 4T evaluada a cada tamaño $C$, incorporando barras de error con la desviación estándar.}
+    \label{fig:throughput_vs_c}
+\end{figure}
+
+Como sintetizan la Figura~\ref{fig:throughput_vs_c} y la Tabla~\ref{tab:c_sweep}, la GPU v2 supera a la CPU SHA-NI 4T en throughput E2E únicamente en el escenario de fragmentos mínimos $C=64$~B (\macrogputputeetwopinned~GB/s frente a \macrocputputfour~GB/s). Para todo $C \geq 1$~KB, la CPU SHA-NI 4T supera con claridad el rendimiento E2E de la GPU (alcanzando 8.21~GB/s en 1~KB y 8.99~GB/s en 1~MB), beneficiándose de operar en la memoria principal del host sin cruzar el enlace PCIe.
+
+\subsection{Comparación entre Plataformas}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{platform_comparison.pdf}
+    \caption{Comparación cruzada en $C=64$~B: (a)~throughput útil (eje logarítmico); (b)~energía neta por GB del dispositivo y, en GPU, la que añade el procesador anfitrión. CPU y GPU se miden con RAPL y NVML; la energía de la FPGA es una estimación de Vivado (extrapolada para 24~núcleos) y su régimen, como el de GPU kernel, no incluye transferencias.}
+    \label{fig:platform_comparison}
+\end{figure}
+
+La Figura~\ref{fig:platform_comparison} y la Tabla~\ref{tab:comparison} consolidan el escenario principal. En \textbf{throughput}, el máximo es la GPU en cómputo puro (15.62~GB/s) y el mínimo, la FPGA de un núcleo (0.047~GB/s); extremo a extremo, sin embargo, la GPU cae a 4.98~GB/s por el bus PCIe: supera a la referencia CPU 4T (3.55~GB/s) pero queda por debajo de la CPU con todos sus núcleos (5.84~GB/s), que opera sobre la memoria principal. En \textbf{energía} entre las plataformas con telemetría física, la mejor es la CPU de 12~CPUs (2.53~J/GB) y la peor, la GPU extremo a extremo con su anfitrión (5.48~J/GB, 2.17~veces más); incluso como dispositivo aislado, la GPU E2E (3.49~J/GB) consume un 15.5\,\% menos que la CPU 4T (4.13~J/GB) pero un 37.9\,\% más que la mejor CPU. La CPU heterogénea es así la arquitectura más eficiente entre CPU y GPU a nivel de dispositivo y de sistema completo; la FPGA, con potencia estimada y sin anfitrión, se discute en la Sección~\ref{sec:fpga_results}. El régimen kernel-only (1.62~J/GB) sugiere, como hipótesis, que la GPU sería la más eficiente si las transferencias se amortizaran en algoritmos de múltiples rondas locales; para mensajes independientes de un solo paso, el bus determina el resultado.
+
+\begin{table}[htbp]
+  \caption{Comparación cruzada de rendimiento y eficiencia energética ($C=64$~B)}
+  \label{tab:comparison}
+  \centering
+  \setlength{\tabcolsep}{3.5pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccc}
+    \toprule
+    \textbf{Plataforma / Config.} & \textbf{Throughput (GB/s)} & \textbf{Mhash/s} & \textbf{J/GB neto (disp.)} & \textbf{J/GB neto (+host)} & \textbf{Speedup$^a$} \\
+    \midrule
+    Escalar 1T               & 0.11 $\pm$ 0.00      &   1.71 $\pm$ 0.00 & 45.58 $\pm$ 0.05 & 45.58 $\pm$ 0.05 & 0.03$\times$ \\
+    SHA-NI 1T                & 0.89 $\pm$ 0.00      &  13.90 $\pm$ 0.01 &  5.28 $\pm$ 0.02 &  5.28 $\pm$ 0.02 & 0.25$\times$ \\
+    SHA-NI 4T (ref.)         & 3.55 $\pm$ 0.00      &  55.45 $\pm$ 0.01 &  4.13 $\pm$ 0.05 &  4.13 $\pm$ 0.05 & 1.00$\times$ \\
+    SHA-NI 8T                & 5.60 $\pm$ 0.02      &  87.45 $\pm$ 0.35 &  2.67 $\pm$ 0.05 &  2.67 $\pm$ 0.05 & 1.58$\times$ \\
+    SHA-NI 12 CPUs (P+E)     & 5.84 $\pm$ 0.02      &  91.25 $\pm$ 0.24 &  2.53 $\pm$ 0.02 &  2.53 $\pm$ 0.02 & 1.65$\times$ \\
+    GPU v2 kernel            & 15.62 $\pm$ 0.15     & 244.02 $\pm$ 2.38 &  1.62 $\pm$ 0.02 &  2.45 $\pm$ 0.04 & 4.40$\times$ \\
+    GPU v2 E2E pinned        & 4.98 $\pm$ 0.02      &  77.86 $\pm$ 0.33 &  3.49 $\pm$ 0.04 &  5.48 $\pm$ 0.07 & 1.40$\times$ \\
+    \midrule
+    FPGA Spartan-7, 1 núcleo$^{b}$   & 0.047 $\pm$ 0.000 &  0.735 $\pm$ 0.000 & 0.74$^{c}$ & --- & 0.013$\times$ \\
+    FPGA Spartan-7, 24 núcleos$^{b}$ & 1.129 $\pm$ 0.000 & 17.647 $\pm$ 0.000 & 0.77 (0.75--0.80)$^{c,d}$ & --- & 0.32$\times$ \\
+    \bottomrule
+  \end{tabular}%
+  }
+  \par\vspace{2pt}
+  \begin{minipage}{\columnwidth}\footnotesize\raggedright
+  $^a$Speedup vs.~CPU SHA-NI 4T E2E ($C=64$~B). Los speedups de GPU v2 kernel (aislado en VRAM) y de la FPGA (datos generados en el chip) no son comparables con E2E. En CPU, J/GB neto descuenta un reposo de 5.15~W (RAPL PKG). J/GB neto (+host) suma la energía RAPL PKG del host durante la ejecución (excluye la DRAM del host); la FPGA no tiene anfitrión activo durante la medición (---).
+  $^b$Régimen en chip a 100~MHz, comparable con GPU~v2 kernel y no con E2E; throughput derivado de los ciclos contados en hardware (variación entre corridas $<0.03$\,\%).
+  $^{c}$Potencia dinámica \emph{estimada} por Vivado (SAIF para $N=1$), no medida físicamente; con la estática del chip (0.090~W) la energía bruta es 2.66~J/GB ($N=1$) y 0.85~J/GB ($N=24$). $^{d}$Extrapolado a partir de $N=1,4,8$; entre paréntesis, el rango de los dos métodos de extrapolación.
+  \end{minipage}
+\end{table}
+
+%% ─────────────────────────────────────────────────────────────────
+\subsection{Resultados de FPGA y Escalado Multinúcleo}
+\label{sec:fpga_results}
+%% ─────────────────────────────────────────────────────────────────
+
+La Tabla~\ref{tab:fpga} y la Figura~\ref{fig:fpga_scaling} resumen los resultados en placa y post-implementación del acelerador para $N = 1$, 4, 8, 16 y 24 núcleos. En las 25~corridas de 60~s (5 por cada $N$) el banco registró exactamente 136~ciclos por mensaje y núcleo, por lo que el throughput útil escala de forma lineal exacta con $N$: de 0.047~GB/s (0.735~Mhash/s) con un núcleo a 1.129~GB/s (17.65~Mhash/s) con 24, es decir, $N \times 64~\text{B} \times 100~\text{MHz}/136$. La correctitud se verificó recomputando en el anfitrión las cadenas completas de mensajes desde el arranque de cada diseño: 12\,293~millones de hashes en total (de 231.8~millones con $N=1$ a 5\,562.8~millones con $N=24$), cuyo XOR final coincidió bit a bit con el digest leído de la FPGA en las 25~corridas, además del autotest NIST superado en silicio en todos los núcleos.
+
+\begin{table}[htbp]
+  \caption{Escalado multinúcleo del acelerador SHA-256 en FPGA (SP701, xc7s100fgga676-2, 100~MHz, $C=64$~B)}
+  \label{tab:fpga}
+  \centering
+  \setlength{\tabcolsep}{3pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lccccccc}
+    \toprule
+    \textbf{$N$} & \textbf{GB/s$^a$} & \textbf{Mhash/s} & \textbf{LUT (\%)$^b$} & \textbf{WNS (ns)$^b$} & \textbf{$P_\text{din}$ (W)$^c$} & \textbf{J/GB neto$^c$} & \textbf{J/GB bruto$^c$} \\
+    \midrule
+     1 & 0.047 &  0.735 &  2\,037 (3.2)  & 1.524 & 0.035 & 0.74 & 2.66 \\
+     4 & 0.188 &  2.941 &  8\,127 (12.7) & 1.285 & 0.139 & 0.74 & 1.22 \\
+     8 & 0.376 &  5.882 & 16\,368 (25.6) & 0.574 & 0.298 & 0.79 & 1.03 \\
+    16 & 0.753 & 11.765 & 32\,467 (50.7) & 0.652 & 0.583$^{d}$ (0.569--0.598) & 0.77 (0.76--0.79) & 0.89 (0.88--0.91) \\
+    24 & 1.129 & 17.647 & 48\,837 (76.3) & 0.535 & 0.871$^{d}$ (0.843--0.899) & 0.77 (0.75--0.80) & 0.85 (0.83--0.88) \\
+    \bottomrule
+  \end{tabular}%
+  }
+  \par\vspace{2pt}
+  \begin{minipage}{\columnwidth}\footnotesize\raggedright
+  $^a$Throughput útil calculado con los ciclos contados en hardware (136 por mensaje y núcleo, exacto en las 25~corridas de 60~s); la variación entre corridas medida con el reloj del anfitrión es $<0.03$\,\%. Speedup respecto de CPU SHA-NI 4T: $0.013\times$ ($N=1$) a $0.32\times$ ($N=24$).
+  $^b$LUT del bloque multinúcleo ($N$ bancos con su núcleo y el árbol XOR) sobre 64\,000 disponibles, sin la infraestructura de depuración (núcleo VIO y su concentrador JTAG); holgura de setup con restricción de 10~ns. Para $N=1$ se usa la implementación del mismo envoltorio sin VIO; los demás $N$ son los diseños programados en la placa.
+  $^c$Estimación del análisis de potencia de Vivado sobre el diseño ruteado (no es una medición física). Neto: solo potencia dinámica del bloque; bruto: suma la estática del chip (0.090~W). $^{d}$Extrapolado (sin SAIF por el límite de licencia de XSim): promedio de la recta SAIF sobre $N=1,4,8$ y del \textit{vectorless} calibrado; entre paréntesis, el rango de ambos métodos.
+  \end{minipage}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{fpga_scaling.pdf}
+    \caption{Escalado multinúcleo en FPGA ($C=64$~B, 100~MHz): (a)~throughput útil frente al número de núcleos $N$ (eje logarítmico), con las referencias GPU~v2 kernel-only y CPU SHA-NI 12~CPUs (P+E); (b)~energía por GB neta (solo dinámica, estimada con SAIF) y bruta (más la estática del chip). Los puntos huecos ($N=16$ y 24) son extrapolados y sus barras cubren el rango de los dos métodos de extrapolación. Las referencias CPU/GPU son mediciones RAPL/NVML; las de la FPGA son estimaciones de Vivado.}
+    \label{fig:fpga_scaling}
+\end{figure}
+
+\textit{Área y temporización.} Cada núcleo ocupa 1\,757--1\,792~LUT y 1\,054--1\,057~FF, y con su banco de prueba $\approx$1\,950--1\,990~LUT; el bloque completo de 24~núcleos usa 48\,837~LUT (76.3\,\%) y 43\,097~FF (33.7\,\%), sin DSP ni BRAM. Los cinco diseños cumplen la restricción de 10~ns con holguras de setup entre 0.535~ns ($N=24$) y 1.524~ns ($N=1$), lo que acota la frecuencia máxima en al menos 105~MHz para el diseño más denso; no se realizó un barrido de la restricción para determinar $f_{\max}$. El ligero crecimiento de la lógica de agregación (de 83 a 1\,285~LUT para el árbol XOR y los registros de salida) explica que la energía neta por GB no sea perfectamente constante.
+
+\textit{Potencia y energía.} La potencia dinámica estimada crece linealmente con $N$ (0.035, 0.139 y 0.298~W con SAIF para $N = 1$, 4 y 8; 0.583 y 0.871~W extrapolados para 16 y 24), de modo que la energía \emph{neta} se mantiene entre 0.74 y 0.79~J/GB en todo el rango. La potencia estática del chip (0.090~W), en cambio, es independiente de $N$: representa el 72\,\% de la potencia total con un núcleo y solo el 9\,\% con 24. Por ello la energía \emph{bruta} cae de 2.66~J/GB ($N=1$) a 0.85~J/GB ($N=24$), con rendimientos decrecientes a partir de $N \approx 8$ (1.03~J/GB), como muestra la Figura~\ref{fig:fpga_scaling}(b): replicar el núcleo es, en esta plataforma, la vía principal para amortizar la potencia estática. Respecto de las referencias con telemetría física, la FPGA con 24 núcleos (0.77~J/GB netos, 0.85~J/GB brutos) queda por debajo de la GPU~v2 kernel-only (1.62 y 1.90~J/GB) y de la mejor CPU (2.53 y 3.42~J/GB), con factores de 0.48 y 0.30 en energía neta, y 0.45 y 0.25 en energía bruta, respectivamente; su potencia total estimada en el chip, 0.96~W, es más de 20~veces menor que los $\approx$20~W de la CPU y los 29.7~W de la GPU. Debe recordarse que estas cifras de FPGA son estimaciones del modelo de potencia (y extrapoladas para $N=24$) y que su perímetro excluye la placa, mientras que las de CPU y GPU son medidas en hardware.
+
+\textit{Límite de throughput y cuello de botella de E/S.} A cambio de esa eficiencia, el throughput de los 24 núcleos (1.13~GB/s; speedup de $0.32\times$ respecto de SHA-NI 4T) es 5.2~veces inferior al de la CPU con 12~CPUs (5.84~GB/s) y 13.8~veces inferior al de la GPU kernel-only (15.62~GB/s). Con $\approx$2\,000~LUT por núcleo y banco, el dispositivo admitiría del orden de 30~núcleos ($\approx$1.4~GB/s a 100~MHz) antes de agotar las LUT, y la holgura de temporización sugiere un margen de frecuencia modesto sin rediseñar el camino crítico. El límite práctico, sin embargo, es la entrada/salida: sostener 1.13~GB/s de mensajes requeriría $\approx$9~Gb/s de entrada más $\approx$4.5~Gb/s de salida de digests, mientras que la única vía de comunicación usada en este montaje es JTAG/VIO, adecuada para leer contadores pero no para transportar datos, un efecto ya observado en aceleradores SHA-256 multinúcleo, donde la transferencia con el anfitrión llegó a multiplicar por 550 el tiempo total~\cite{tran2021bca} (un enlace Gigabit Ethernet, por ejemplo, aportaría a lo sumo 0.125~GB/s). Esta es la razón metodológica para comparar la FPGA con el régimen kernel-only de la GPU: una evaluación extremo a extremo exigiría una interfaz de alta velocidad hacia el anfitrión, y su costo energético se sumaría al del chip, tal como el host suma 0.83~J/GB al kernel de la GPU (Tabla~\ref{tab:comparison}).
+
+\textit{Posición frente a la literatura.} La Tabla~\ref{tab:fpga_lit} sitúa el núcleo evaluado entre los trabajos FPGA citados. Con 0.37~Mbps/LUT (throughput de bloque), el núcleo queda por debajo de implementaciones iterativas optimizadas para área o consumo en familias comparables o más recientes (0.79--2.11~Mbps/LUT~\cite{r4, martino_iot2020, gad2020low}) y muy lejos de los diseños completamente segmentados~\cite{r2}, lo que es coherente con la ausencia de optimizaciones del camino crítico (Sección~\ref{sec:fpga_opt}) y con el banco de prueba y los contadores incluidos en el área reportada. La replicación de núcleos tampoco es nueva: los aceleradores multinúcleo de la literatura~\cite{phan2021multicore, tran2021bca} la emplean con núcleos más rápidos y memoria local, y la diferencia aquí es que el escalado se mide en placa con la carga unificada y se verifica recomputando la cadena completa de hashes. El aporte de este trabajo no es, por tanto, el núcleo, sino la medición de las tres plataformas con la misma carga de mensajes cortos encadenados, verificación exhaustiva y una contabilidad energética explícita; las cifras de la tabla provienen de cargas, herramientas y perímetros de potencia distintos y solo deben leerse como contexto.
+
+\begin{table*}[!t]
+  \caption{Implementaciones de SHA-256 en FPGA citadas en este trabajo frente al núcleo iterativo evaluado (valores tomados del texto original de cada fuente; --- = no reportado)}
+  \label{tab:fpga_lit}
+  \centering
+  \setlength{\tabcolsep}{4pt}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llllccll}
+    \toprule
+    \textbf{Trabajo} & \textbf{Arquitectura} & \textbf{Dispositivo} & \textbf{$f$ (MHz)} & \textbf{Throughput$^a$} & \textbf{Mbps/LUT} & \textbf{Área} & \textbf{Potencia} \\
+    \midrule
+    Chaves et al.~\cite{chaves2006, r3} & iterativo, reprogramación de operaciones & Virtex-II Pro XC2VP30-7 & 174 & 1.37~Gbps (1.83~Mbps/slice) & --- & 755 slices + 1 BRAM & --- \\
+    Michail et al.~\cite{michail2009} & desenrollado parcial $\times$2, segmentado & Virtex-II & 52.1$^{b}$ & 3.10~Gbps$^{b}$ & --- & 1\,708 CLB & --- \\
+    Li et al.~\cite{r2} & pipeline completo, 64 etapas & Virtex-7 xc7vx690t & 429 & 219.65~Gbps (24.84~Mbps/slice) & --- & 8\,842 slices & --- \\
+    Pham et al.~\cite{pham2020double} & doble SHA-256 desenrollado & Zynq US+ ZCU102 & 374.2 & 383.18~Gbps$^{c}$ & 8.32 & 46\,013 LUT & 2.49~W (a 333~MHz) \\
+    Pham et al.~\cite{r1} & multimodo SHA-2, SoC completo & Alveo U280 & 250 & 99.7~Mhash/s & --- & 285\,754 LUT & 6.57~W \\
+    Martino y Cilardo~\cite{martino_iot2020} & iterativo configurable (\textit{Naive}, UF1) & Kintex US+ XCKU5P & 417$^{d}$ & 6.52~Mhash/s ($\approx$3.34~Gbps)$^{d}$ & 2.11$^{d}$ & 1\,578 LUT & 0.122~W din. (0.573 total) \\
+    Liu et al.~\cite{liu2019energy} & SHA-256 segmentado (contraseñas) & Zynq XC7Z030-3 & 190 & 189~M SHA-256/s por núcleo & --- & --- & 12.95~W medidos$^{g}$ \\
+    Kammoun et al.~\cite{kammoun2020} & HLS, bucles desenrollados & Zynq XC7Z020 & 181 & 917~Mbps & --- & 6\,367 slices & --- \\
+    Gad et al.~\cite{gad2020low} & iterativo, 67 ciclos/bloque & Virtex-7 xc7v2000t & 83.33 & 0.637~Gbps (2.32~Mbps/slice) & 0.83 & 275 slices, 763 LUT & 13~mW (dinámica)$^{h}$ \\
+    Phan et al.~\cite{phan2021multicore} & ALU paralela 5 etapas; 8 PE & Zynq-7000 (1 PE) & 241.8 & 1.35~Gbps (1 PE) & 0.42 & 3\,203 LUT (1 PE) & --- \\
+    Tran et al.~\cite{tran2021bca} & 64 núcleos de doble SHA-256 & Alveo U280 & 400 & $\approx$359~Mhash/s dobles$^{i}$ & --- & 18\,\% de las LUT & 8.38~W (dinámica) \\
+    Kieu-Do-Nguyen et al.~\cite{r4} & iterativo, bajo consumo & Artix-7 / Spartan-7 xc7s50 & 139.0 / 123.8 & 1.04~Gbps$^{e}$ & 0.79 & 1\,310 LUT, 327 slices & 0.072~W (conf. mínima) \\
+    Pham et al.~\cite{pham2026cryptorv} & coprocesador RISC-V multialgoritmo & Zynq US+ ZCU102 & 160 & $\approx$0.56~Gbps$^{f}$ & --- & 34\,704 LUT (total) & 0.851~W (dinámica) \\
+    \midrule
+    Este trabajo, $N=1$ & iterativo, 1 ronda/ciclo, $W[16]$ & Spartan-7 xc7s100 & 100 & 0.753~Gbps & 0.37 & 2\,037 LUT & 0.035~W (din., SAIF) \\
+    Este trabajo, $N=24$ & 24 núcleos iterativos en paralelo & Spartan-7 xc7s100 & 100 & 18.07~Gbps & 0.37 & 48\,837 LUT & 0.871~W (din., extrap.) \\
+    \bottomrule
+  \end{tabular}%
+  }
+  \par\vspace{3pt}
+  \begin{minipage}{\textwidth}\footnotesize\raggedright
+  $^a$Throughput de bloque (512~bits por bloque de compresión), convención habitual de la literatura; para este trabajo equivale a $N \times 512~\text{bits} \times 100~\text{MHz}/68$~ciclos, el doble del throughput útil de la Tabla~\ref{tab:fpga} (relleno incluido). Las filas no son directamente comparables: difieren la familia y el nodo tecnológico, la inclusión del relleno, la carga (un bloque largo frente a mensajes cortos encadenados), la herramienta y el modo de estimación de potencia. $^{b}$Frecuencia post-síntesis y throughput post-ruteo, tal como los reporta la fuente. $^{c}$La fuente cuenta 1\,024~bits por hash doble, con un hash por ciclo; verificado en placa a 333~MHz (340.99~Gbps). $^{d}$Frecuencia derivada del retardo de camino crítico reportado (2.398~ns); throughput y Mbps/LUT calculados con 512~bits por hash (la fuente reporta 1.057~Mbps/LUT contando 256~bits). $^{e}$A 139~MHz en Artix-7; la fuente mide 751~Mbps en placa (Cyclone~V) a 100~MHz. $^{f}$Derivado de los 146~ciclos por mensaje de 64~B a 160~MHz reportados; el coprocesador integra además SHA-512, SM3, SHA-3 y AES. $^{g}$Potencia de la placa completa medida en la fuente de 5~V durante la aplicación RAR5 (2~núcleos SHA-256 y el procesador ARM). $^{h}$La fuente la reporta como ``13~mV''; estática: 148~mW. $^{i}$Derivado de los $2^{32}$ hashes dobles calculados en 11.95~s reportados.
+  \end{minipage}
+\end{table*}
+
+\section{Conclusiones}
+Este artículo evaluó empíricamente el algoritmo criptográfico SHA-256 bajo un marco heterogéneo comparando CPU con extensiones SHA-NI, GPU bajo modelo SIMT y FPGA personalizada en RTL, sobre un flujo masivo de mensajes independientes de 64~B. Las mediciones en la plataforma evaluada indican que, si bien la GPU ofrece un potencial aritmético masivo en cómputo puro en VRAM (15.62~GB/s), su tasa extremo a extremo queda estrangulada por el bus PCIe a 4.98~GB/s. En contrapartida, la CPU heterogénea asistida por planificación dinámica libre de cerrojos y operando sobre memoria local supera el throughput E2E de la GPU con 5.84~GB/s y consolida la mayor eficiencia energética de sistema completo entre las plataformas con telemetría física (2.53~J/GB netos con host frente a 5.48~J/GB de GPU+host). La FPGA completa la comparativa de tres vías: un núcleo iterativo estándar en Spartan-7, replicado hasta 24~instancias y validado en hardware sobre 12\,293~millones de mensajes encadenados, escala linealmente hasta 1.13~GB/s a 100~MHz con 48\,837~LUT y 0.96~W estimados en el chip. Alcanza la menor energía por byte del estudio (0.77~J/GB netos y 0.85~J/GB brutos, estimación de Vivado parcialmente extrapolada, frente a 1.62/1.90~J/GB de la GPU kernel-only y 2.53/3.42~J/GB de la CPU), y el escalado muestra que replicar el núcleo amortiza la potencia estática del dispositivo (del 72\,\% del total con un núcleo al 9\,\% con 24). Su throughput, sin embargo, es 5.2 y 13.8~veces menor que el de la CPU y la GPU en cómputo puro, y, en este montaje, carece de una interfaz capaz de alimentarlo desde el anfitrión, por lo que solo es comparable con el régimen kernel-only. En conjunto, los resultados indican que, para flujos de mensajes cortos independientes, el bus de interconexión y la contabilidad del sistema completo pesan tanto como la capacidad aritmética del acelerador. Como trabajo futuro se plantea medir la potencia de la FPGA directamente en la placa (en lugar de estimarla), realizar un barrido de la restricción de reloj para determinar $f_{\max}$, acortar el camino crítico del núcleo (precómputo de $h + K_t + W_t$ y reordenamiento de operaciones) y evaluar la FPGA de extremo a extremo con una interfaz de alta velocidad hacia el anfitrión, incorporando su energía al mismo perímetro de sistema completo que CPU y GPU.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\vspace{12pt}
+
+\end{document}
